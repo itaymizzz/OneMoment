@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b0b0f;
+  --foreground: #f5f5f7;
+  --muted: #9a9aa6;
+  --card: #15151c;
+  --border: #26262f;
+  --accent: #e8b04b; /* dorado cálido, tono "evento" */
+  --accent-2: #d65db1; /* magenta fiesta */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Titulares "de invitación": serif elegante. */
+.font-display {
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  letter-spacing: 0.01em;
+}
+
+/* Foco visible y consistente para navegación por teclado (a11y). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 0.4rem;
+}
+
+/* Respeta a quien prefiere menos movimiento. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Fondo con un sutil halo de luz tipo escenario */
+.stage-bg {
+  background:
+    radial-gradient(60rem 40rem at 50% -10%, rgba(232, 176, 75, 0.12), transparent 60%),
+    radial-gradient(50rem 30rem at 90% 10%, rgba(214, 93, 177, 0.1), transparent 55%),
+    var(--background);
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #1a1208;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.btn-primary:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  background: #0e0e14;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  color: var(--foreground);
+  outline: none;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+}

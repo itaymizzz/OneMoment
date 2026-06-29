@@ -1,0 +1,86 @@
+// OneMoment — schema
+// Tus invitados capturan el evento. La IA crea la película.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Un evento (boda, cumpleaños, etc.). Se comparte por QR/link.
+model Event {
+  id        String   @id @default(cuid())
+  slug      String   @unique // usado en el link público /j/<slug>
+  name      String // "Boda de Barak & ..."
+  type      String   @default("wedding") // wedding | birthday | corporate | ...
+  date      DateTime?
+  hostName  String? // quién organiza
+  coverColor String  @default("#0f0f12")
+  createdAt DateTime @default(now())
+
+  guests Guest[]
+  media  MediaItem[]
+  reels  Reel[]
+}
+
+// Un invitado que sube contenido. Identificado por nombre + cookie/sesión, sin login.
+model Guest {
+  id        String   @id @default(cuid())
+  name      String
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  media MediaItem[]
+
+  @@index([eventId])
+}
+
+// Una foto o video subido por un invitado.
+model MediaItem {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guestId   String?
+  guest     Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  kind      String // "photo" | "video"
+  filename  String // nombre en disco (storage)
+  mimeType  String
+  width     Int?
+  height    Int?
+  durationS Float? // duración en segundos (video)
+  takenAt   DateTime? // timestamp de captura si está en metadata
+  createdAt DateTime @default(now())
+
+  // ----- Capa de IA -----
+  status      String  @default("pending") // pending | processing | scored | failed
+  qualityScore Float? // 0..1 nitidez/exposición/composición
+  isBlurry    Boolean @default(false)
+  isDuplicate Boolean @default(false)
+  dupGroup    String? // hash perceptual / grupo de duplicados
+  moment      String? // entrada | ceremonia | beso | baile | brindis | fiesta | ...
+  hasFaces    Boolean @default(false)
+  faceCount   Int     @default(0)
+  caption     String? // descripción generada por IA
+  selected    Boolean @default(false) // entró en el "mejor de"
+
+  @@index([eventId, status])
+  @@index([eventId, moment])
+}
+
+// Una película/reel generado para el evento.
+model Reel {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  format    String // "reel" (30s) | "trailer" (3min) | "film" (10min)
+  status    String   @default("queued") // queued | rendering | done | failed
+  outputUrl String?
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+}

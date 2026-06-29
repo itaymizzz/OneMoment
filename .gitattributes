@@ -1,0 +1,5 @@
+# Los scripts de shell y el Dockerfile DEBEN usar saltos de línea LF para
+# funcionar dentro del contenedor Linux de Railway (CRLF rompe `sh`).
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+Dockerfile text eol=lf
