@@ -36,5 +36,10 @@ export async function renderReel(
     codec: "h264",
     outputLocation,
     inputProps,
+    // Máxima calidad: capturamos cada frame casi sin pérdida (jpegQuality 100)
+    // y encodeamos con CRF bajo (18 ≈ visualmente sin pérdida). Archivo más
+    // pesado, pero las fotos se ven nítidas dentro del video.
+    jpegQuality: 100,
+    crf: 18,
   });
 }
