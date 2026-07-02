@@ -81,9 +81,25 @@ export default function ReelStudio({ eventId }: { eventId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ format }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Falló el render");
-      setReels((prev) => [data.reel, ...prev]);
+      // El servidor puede devolver texto plano (p.ej. "upstream error" del
+      // proxy si el contenedor se quedó sin memoria y se reinició) — parseamos
+      // con cuidado para no romper con "Unexpected token".
+      const raw = await res.text();
+      let data: { reel?: Reel; error?: string } | null = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+      if (!res.ok || !data) {
+        throw new Error(
+          data?.error ??
+            (res.status >= 500
+              ? "El render superó la memoria del servidor y se reinició. Prueba con un Reel (más corto) o reinténtalo; si sigue, sube la memoria del servicio en Railway."
+              : "Falló el render"),
+        );
+      }
+      if (data.reel) setReels((prev) => [data.reel!, ...prev]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {

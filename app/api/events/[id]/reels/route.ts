@@ -38,6 +38,18 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  // Limpia renders colgados: si el contenedor se reinició a mitad (OOM), la
+  // fila queda en "rendering" para siempre. Tras 30 min lo damos por fallido
+  // (un reel/tráiler tarda minutos; margen de sobra para una película larga).
+  const STALE_MS = 30 * 60 * 1000;
+  await prisma.reel.updateMany({
+    where: {
+      eventId: id,
+      status: "rendering",
+      createdAt: { lt: new Date(Date.now() - STALE_MS) },
+    },
+    data: { status: "failed" },
+  });
   const reels = await prisma.reel.findMany({
     where: { eventId: id },
     orderBy: { createdAt: "desc" },

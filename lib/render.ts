@@ -41,5 +41,13 @@ export async function renderReel(
     // pesado, pero las fotos se ven nítidas dentro del video.
     jpegQuality: 100,
     crf: 18,
+    // ── Memoria acotada (para que no reviente en un contenedor pequeño) ──
+    // Remotion por defecto abre 1 pestaña de Chrome por núcleo → mucha RAM y
+    // OOM en instancias chicas (Railway devolvía "upstream error" al morir el
+    // contenedor). Serializamos el render (concurrency baja) y limitamos la
+    // caché de video. Ambos ajustables por env si subes la memoria del server.
+    concurrency: Number(process.env.REMOTION_CONCURRENCY) || 1,
+    offthreadVideoCacheSizeInBytes:
+      Number(process.env.REMOTION_VIDEO_CACHE_BYTES) || 256 * 1024 * 1024,
   });
 }
