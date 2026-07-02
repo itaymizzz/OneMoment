@@ -110,3 +110,39 @@ select:focus,
 textarea:focus {
   border-color: var(--accent);
 }
+
+/* ── Cartel para imprimir ──────────────────────────────────────────────────
+   El póster usa unidades de contenedor (cqw/cqh) para verse idéntico tanto en
+   la vista previa (escalado) como al imprimir (página completa). */
+.poster {
+  container-type: size;
+}
+/* Fuerza a los navegadores a imprimir fondos y colores del cartel. */
+.poster {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  /* Oculta todo menos el cartel. */
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: fixed;
+    inset: 0;
+    margin: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  @page {
+    margin: 0;
+  }
+}

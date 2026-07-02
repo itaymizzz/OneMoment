@@ -13,6 +13,8 @@ export type Media = {
   faceCount: number;
   caption: string | null;
   selected: boolean;
+  pinned: boolean;
+  hidden: boolean;
   durationS: number | null;
   createdAt: string | Date;
   guest?: { name: string } | null;

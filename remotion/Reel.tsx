@@ -5,13 +5,23 @@ import {
   Easing,
   useCurrentFrame,
   useVideoConfig,
+  Audio,
 } from "remotion";
-import { Video, Audio } from "@remotion/media";
-import { TransitionSeries, linearTiming } from "@remotion/transitions";
+import { Video } from "@remotion/media";
+import type { Look } from "./types";
+import {
+  TransitionSeries,
+  linearTiming,
+  springTiming,
+  TransitionPresentation,
+} from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
+import { slide } from "@remotion/transitions/slide";
+import { wipe } from "@remotion/transitions/wipe";
+import { flip } from "@remotion/transitions/flip";
+import { clockWipe } from "@remotion/transitions/clock-wipe";
 import {
   buildSegments,
-  formatSpec,
   Segment,
   TRANSITION_FRAMES,
   ReelProps,
@@ -21,17 +31,134 @@ const GOLD = "#e8b04b";
 const MAGENTA = "#d65db1";
 const BG = "#0b0b0f";
 
-// Foto a pantalla completa con efecto Ken Burns (zoom lento) — animado con
-// useCurrentFrame()/interpolate(), nunca con transiciones CSS.
-function KenBurnsPhoto({ url, durationInFrames }: { url: string; durationInFrames: number }) {
+// ── Sincronía al beat ───────────────────────────────────────────────────────
+// Devuelve un factor de escala que "late" en cada beat (más fuerte en el
+// downbeat de cada compás de 4) y una intensidad de destello para el downbeat.
+// Con BPM constante la fase es exacta; para pistas de tempo variable habría que
+// pasar un array de beats.
+function beatPulse(
+  frame: number,
+  fps: number,
+  bpm: number | null,
+  offsetSec: number,
+): { scale: number; flash: number } {
+  if (!bpm) return { scale: 1, flash: 0 };
+  const spb = 60 / bpm;
+  const t = frame / fps - offsetSec;
+  if (t < 0) return { scale: 1, flash: 0 };
+  const beatPos = t / spb;
+  const phase = beatPos - Math.floor(beatPos); // 0..1 dentro del beat
+  const isDown = Math.floor(beatPos) % 4 === 0;
+  const pulse = Math.exp(-phase * 6); // golpe fuerte que decae
+  const amp = isDown ? 0.04 : 0.02;
+  return { scale: 1 + amp * pulse, flash: isDown ? 0.07 * pulse : 0 };
+}
+
+// ── Colorización / look cinematográfico ─────────────────────────────────────
+function mediaFilter(look: Look): string | undefined {
+  switch (look) {
+    case "cinematic":
+      return "contrast(1.08) saturate(1.12) brightness(1.02)";
+    case "warm":
+      return "contrast(1.05) saturate(1.18) sepia(0.12)";
+    case "bw":
+      return "grayscale(1) contrast(1.12)";
+    case "none":
+      return undefined;
+  }
+}
+
+// Capa de gradación teal-orange (sombras frías, luces cálidas) al estilo cine.
+function GradeOverlay({ look }: { look: Look }) {
+  if (look === "none" || look === "bw") return null;
+  const warm = look === "warm" ? 0.6 : 0.5;
+  return (
+    <>
+      <AbsoluteFill
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(255,170,90,0.5) 0%, rgba(255,170,90,0) 45%, rgba(0,120,140,0) 60%, rgba(0,120,140,0.5) 100%)",
+          mixBlendMode: "soft-light",
+          opacity: warm,
+          pointerEvents: "none",
+        }}
+      />
+      <AbsoluteFill
+        style={{
+          background:
+            "radial-gradient(70% 60% at 50% 45%, rgba(255,240,220,0.10), transparent 70%)",
+          mixBlendMode: "overlay",
+          opacity: 0.6,
+          pointerEvents: "none",
+        }}
+      />
+    </>
+  );
+}
+
+// ── Movimientos de cámara variados (no solo zoom) ──────────────────────────
+// Cada uno devuelve estilos animados con useCurrentFrame()/interpolate().
+type Motion =
+  | "zoomIn"
+  | "zoomOut"
+  | "panLeft"
+  | "panRight"
+  | "panUp"
+  | "panDown"
+  | "diagonal";
+
+const MOTIONS: Motion[] = [
+  "zoomIn",
+  "panLeft",
+  "zoomOut",
+  "panRight",
+  "diagonal",
+  "panUp",
+  "panDown",
+];
+
+function motionStyle(kind: Motion, frame: number, d: number) {
+  const ease = Easing.bezier(0.25, 0.1, 0.25, 1);
+  const p = (a: number, b: number) =>
+    interpolate(frame, [0, d], [a, b], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: ease,
+    });
+  switch (kind) {
+    case "zoomIn":
+      return { scale: String(p(1.04, 1.17)), translate: "0% 0%" };
+    case "zoomOut":
+      return { scale: String(p(1.17, 1.04)), translate: "0% 0%" };
+    case "panLeft":
+      return { scale: "1.14", translate: `${p(2.5, -2.5)}% 0%` };
+    case "panRight":
+      return { scale: "1.14", translate: `${p(-2.5, 2.5)}% 0%` };
+    case "panUp":
+      return { scale: "1.14", translate: `0% ${p(2.5, -2.5)}%` };
+    case "panDown":
+      return { scale: "1.14", translate: `0% ${p(-2.5, 2.5)}%` };
+    case "diagonal":
+      return {
+        scale: String(p(1.06, 1.16)),
+        translate: `${p(1.8, -1.8)}% ${p(1.6, -1.6)}%`,
+      };
+  }
+}
+
+function MotionPhoto({
+  url,
+  durationInFrames,
+  motion,
+  look,
+}: {
+  url: string;
+  durationInFrames: number;
+  motion: Motion;
+  look: Look;
+}) {
   const frame = useCurrentFrame();
-  const scale = interpolate(frame, [0, durationInFrames], [1.03, 1.14], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-  });
-  const y = interpolate(frame, [0, durationInFrames], [0, -2.5], {
-    extrapolateRight: "clamp",
-  });
+  const s = motionStyle(motion, frame, durationInFrames);
   return (
     <AbsoluteFill style={{ overflow: "hidden", backgroundColor: BG }}>
       <Img
@@ -40,20 +167,59 @@ function KenBurnsPhoto({ url, durationInFrames }: { url: string; durationInFrame
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          scale: String(scale),
-          translate: `0% ${y}%`,
+          scale: s.scale,
+          translate: s.translate,
+          filter: mediaFilter(look),
         }}
       />
     </AbsoluteFill>
   );
 }
 
-function ClipFrame({ segment }: { segment: Extract<Segment, { kind: "clip" }> }) {
+// ── Transiciones variadas entre clips ──────────────────────────────────────
+// El prop `presentation` de <TransitionSeries.Transition> espera este tipo
+// genérico "abierto"; cada preset (fade/slide/clockWipe…) trae props distintas,
+// así que unificamos con un cast explícito (solo tipos, sin efecto en runtime).
+type AnyPresentation = TransitionPresentation<Record<string, unknown>>;
+
+function transitionFor(
+  i: number,
+  width: number,
+  height: number,
+): { presentation: AnyPresentation; durationInFrames: number } {
+  const list = [
+    () => fade(),
+    () => slide({ direction: "from-right" }),
+    () => wipe({ direction: "from-left" }),
+    () => slide({ direction: "from-bottom" }),
+    () => flip({ direction: "from-left" }),
+    () => wipe({ direction: "from-top-left" }),
+    () => clockWipe({ width, height }),
+    () => slide({ direction: "from-top" }),
+  ];
+  return {
+    presentation: list[i % list.length]() as unknown as AnyPresentation,
+    durationInFrames: TRANSITION_FRAMES,
+  };
+}
+
+function ClipFrame({
+  segment,
+  motion,
+  look,
+  bpm,
+  beatOffsetSec,
+}: {
+  segment: Extract<Segment, { kind: "clip" }>;
+  motion: Motion;
+  look: Look;
+  bpm: number | null;
+  beatOffsetSec: number;
+}) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { clip } = segment;
 
-  // La etiqueta del momento entra suave desde abajo.
   const labelOpacity = interpolate(frame, [3, 12], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -63,19 +229,44 @@ function ClipFrame({ segment }: { segment: Extract<Segment, { kind: "clip" }> })
     extrapolateRight: "clamp",
   });
 
+  // Latido al beat: la imagen "respira" con la música.
+  const beat = beatPulse(frame, fps, bpm, beatOffsetSec);
+
   return (
     <AbsoluteFill style={{ backgroundColor: BG }}>
-      {clip.kind === "video" ? (
-        <Video
-          src={clip.url}
-          volume={0}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      ) : (
-        <KenBurnsPhoto url={clip.url} durationInFrames={segment.durationInFrames} />
-      )}
+      {/* Contenedor con el latido al beat aplicado al medio. */}
+      <AbsoluteFill style={{ scale: String(beat.scale) }}>
+        {clip.kind === "video" ? (
+          <Video
+            src={clip.url}
+            volume={0}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              filter: mediaFilter(look),
+            }}
+          />
+        ) : (
+          <MotionPhoto
+            url={clip.url}
+            durationInFrames={segment.durationInFrames}
+            motion={motion}
+            look={look}
+          />
+        )}
+      </AbsoluteFill>
 
-      {/* Degradado inferior para legibilidad de la etiqueta */}
+      {/* Gradación cinematográfica sobre el medio. */}
+      <GradeOverlay look={look} />
+
+      {/* Destello sutil en el downbeat. */}
+      {beat.flash > 0 ? (
+        <AbsoluteFill
+          style={{ backgroundColor: "#ffffff", opacity: beat.flash, pointerEvents: "none" }}
+        />
+      ) : null}
+
       <AbsoluteFill
         style={{
           background:
@@ -105,7 +296,6 @@ function ClipFrame({ segment }: { segment: Extract<Segment, { kind: "clip" }> })
           </div>
         </AbsoluteFill>
       ) : null}
-      {/* leve viñeta para dar foco */}
       <AbsoluteFill
         style={{
           boxShadow: "inset 0 0 220px rgba(0,0,0,0.45)",
@@ -117,7 +307,6 @@ function ClipFrame({ segment }: { segment: Extract<Segment, { kind: "clip" }> })
   );
 }
 
-// Pequeño marcador de tiempo decorativo arriba a la derecha (estética "cámara").
 function CornerFps({ fps }: { fps: number }) {
   const frame = useCurrentFrame();
   const secs = (frame / fps).toFixed(1);
@@ -240,39 +429,54 @@ function OutroCard() {
 }
 
 export function Reel(props: ReelProps) {
+  const { width, height } = useVideoConfig();
   const segments = buildSegments(props);
 
   const children: React.ReactNode[] = [];
+  let clipIndex = 0;
   segments.forEach((seg, i) => {
     if (i > 0) {
+      const t = transitionFor(i, width, height);
       children.push(
         <TransitionSeries.Transition
           key={`t-${i}`}
-          presentation={fade()}
-          timing={linearTiming({ durationInFrames: TRANSITION_FRAMES })}
+          presentation={t.presentation}
+          timing={
+            i % 3 === 0
+              ? springTiming({ config: { damping: 200 }, durationInFrames: t.durationInFrames })
+              : linearTiming({ durationInFrames: t.durationInFrames })
+          }
         />,
       );
     }
+    let content: React.ReactNode;
+    if (seg.kind === "title") {
+      content = <TitleCard title={props.title} subtitle={props.subtitle} />;
+    } else if (seg.kind === "outro") {
+      content = <OutroCard />;
+    } else {
+      content = (
+        <ClipFrame
+          segment={seg}
+          motion={MOTIONS[clipIndex % MOTIONS.length]}
+          look={props.look}
+          bpm={props.bpm}
+          beatOffsetSec={props.beatOffsetSec}
+        />
+      );
+      clipIndex++;
+    }
     children.push(
       <TransitionSeries.Sequence key={`s-${i}`} durationInFrames={seg.durationInFrames}>
-        {seg.kind === "title" ? (
-          <TitleCard title={props.title} subtitle={props.subtitle} />
-        ) : seg.kind === "outro" ? (
-          <OutroCard />
-        ) : (
-          <ClipFrame segment={seg} />
-        )}
+        {content}
       </TransitionSeries.Sequence>,
     );
   });
 
   return (
     <AbsoluteFill style={{ backgroundColor: BG }}>
-      {props.audioUrl ? <Audio src={props.audioUrl} /> : null}
+      {props.audioUrl ? <Audio src={props.audioUrl} loop volume={0.85} /> : null}
       <TransitionSeries>{children}</TransitionSeries>
     </AbsoluteFill>
   );
 }
-
-// Referenciado para que el tree-shaking no elimine el spec en algún entorno.
-export { formatSpec };

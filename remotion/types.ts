@@ -17,14 +17,30 @@ export type ReelClip = z.infer<typeof reelClipSchema>;
 export const reelFormatSchema = z.enum(["reel", "trailer", "film"]);
 export type ReelFormat = z.infer<typeof reelFormatSchema>;
 
+export const lookSchema = z.enum(["none", "cinematic", "warm", "bw"]);
+export type Look = z.infer<typeof lookSchema>;
+
 export const reelPropsSchema = z.object({
   format: reelFormatSchema,
   title: z.string(),
   subtitle: z.string().default(""),
   clips: z.array(reelClipSchema),
   audioUrl: z.string().nullable().default(null),
+  // ── Sincronía musical ──
+  // BPM del track y desfase del primer beat (seg). Con esto la edición "late"
+  // con la música: los clips duran un número entero de beats y la imagen pulsa
+  // en cada golpe (más fuerte en el downbeat de cada compás de 4).
+  bpm: z.number().positive().nullable().default(null),
+  beatOffsetSec: z.number().min(0).default(0),
+  // ── Look / colorización cinematográfica ──
+  look: lookSchema.default("cinematic"),
 });
 export type ReelProps = z.infer<typeof reelPropsSchema>;
+
+// Segundos por beat a partir del BPM.
+export function secondsPerBeat(bpm: number): number {
+  return 60 / bpm;
+}
 
 export const FPS = 30;
 export const TITLE_FRAMES = Math.round(FPS * 2.2);

@@ -2,6 +2,8 @@ import sharp from "sharp";
 import { prisma } from "./db";
 import { readMedia } from "./storage";
 import { MOMENTS, MOMENT_LABEL } from "./types";
+import { ai } from "./ai/config";
+import { curatePhoto } from "./ai/curate";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Capa de IA "simple" (sin modelos pesados): puntúa calidad, detecta borrosas y
@@ -87,7 +89,16 @@ type Work = {
   takenAt: Date | null;
   guestName: string | null;
   metrics: Metrics | null; // null para video o si falla la lectura
+  // Metadatos de video (los manda el cliente al subir).
+  videoDurationS: number | null;
+  videoW: number | null;
+  videoH: number | null;
+  // Anulación manual del dueño (gana sobre la IA).
+  pinned: boolean;
+  hidden: boolean;
 };
+
+const MAX_VIDEOS_SELECTED = 6; // cuántos videos como máximo entran al "mejor de"
 
 // Procesa todo el contenido pendiente de un evento y recalcula la selección
 // global (dedup, momentos, mejor-de). Idempotente: se puede llamar varias veces.
@@ -133,6 +144,11 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
       takenAt: it.takenAt,
       guestName: it.guest?.name ?? null,
       metrics,
+      videoDurationS: it.durationS ?? null,
+      videoW: it.kind === "video" ? it.width ?? null : null,
+      videoH: it.kind === "video" ? it.height ?? null : null,
+      pinned: it.pinned,
+      hidden: it.hidden,
     });
   }
 
@@ -150,7 +166,13 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
   const blurry = new Set<string>();
   for (const w of work) {
     if (w.kind === "video") {
-      quality.set(w.id, 0.6); // los videos no se puntúan aún (task futura)
+      // Puntuación de video: duración en su punto dulce + resolución.
+      const dur = w.videoDurationS;
+      const durScore =
+        dur == null ? 0.6 : dur < 1.5 ? 0.3 : dur <= 12 ? 1 : dur <= 25 ? 0.7 : 0.45;
+      const resScore =
+        w.videoW && w.videoH ? clamp01(Math.min(w.videoW, w.videoH) / 1080) : 0.6;
+      quality.set(w.id, clamp01(0.5 * durScore + 0.3 * resScore + 0.2));
       continue;
     }
     const m = w.metrics;
@@ -165,6 +187,36 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
     const q = clamp01(0.55 * sharpScore + 0.25 * resScore + 0.2 * expScore);
     quality.set(w.id, q);
     if (m.sharpness > 0 && median > 0 && m.sharpness < blurThreshold) blurry.add(w.id);
+  }
+
+  // ── Curación IA opcional (Claude visión + AWS caras) ──
+  // Sólo si hay claves. Para acotar costo, curamos los mejores candidatos por
+  // calidad técnica (top N) y mezclamos la estética/emoción en su puntuación.
+  const aiMoment = new Map<string, string>();
+  if (ai.anthropic || ai.aws) {
+    const fileOf = new Map(items.map((it) => [it.id, it.filename]));
+    const CURATE_MAX = Number(process.env.AI_CURATE_MAX || 60);
+    const candidates = work
+      .filter((w) => w.kind === "photo" && !blurry.has(w.id))
+      .sort((a, b) => (quality.get(b.id) ?? 0) - (quality.get(a.id) ?? 0))
+      .slice(0, CURATE_MAX);
+
+    for (const w of candidates) {
+      const filename = fileOf.get(w.id);
+      if (!filename) continue;
+      try {
+        const buf = await readMedia(eventId, filename);
+        const score = await curatePhoto(buf);
+        if (!score) continue;
+        let q = clamp01(0.45 * (quality.get(w.id) ?? 0) + 0.55 * score.aesthetic);
+        if (!score.eyesOpen) q *= 0.6; // penaliza ojos cerrados
+        if (score.faces > 0 && score.smile) q = Math.min(1, q * 1.1); // premia sonrisas
+        quality.set(w.id, q);
+        if (score.moment) aiMoment.set(w.id, score.moment);
+      } catch {
+        /* si falla una foto, seguimos con las demás */
+      }
+    }
   }
 
   // ── Duplicados: agrupamos por cercanía de hash perceptual ──
@@ -221,6 +273,12 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
     candidates.forEach((c) => selected.add(c.id));
   }
 
+  // De los videos seleccionados, conservamos solo los mejores (los "tops").
+  const selectedVideos = work
+    .filter((w) => w.kind === "video" && selected.has(w.id))
+    .sort((a, b) => (quality.get(b.id) ?? 0) - (quality.get(a.id) ?? 0));
+  selectedVideos.slice(MAX_VIDEOS_SELECTED).forEach((w) => selected.delete(w.id));
+
   // ── Persistimos ──
   for (const w of work) {
     const m = w.metrics;
@@ -228,19 +286,36 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
     const label = momentKey ? MOMENT_LABEL[momentKey]?.label ?? "" : "";
     const reused = w.kind === "photo" && m && m.sharpness === 0 && m.hash;
 
+    // La anulación manual del dueño manda sobre la IA:
+    //  · hidden → nunca entra a la película (selected=false)
+    //  · pinned → siempre entra (selected=true) y la tratamos como "limpia"
+    //    (sin borrosa/duplicada) para que pase el filtro de los reels.
+    const finalSelected = w.hidden
+      ? false
+      : w.pinned
+        ? true
+        : selected.has(w.id);
+    const finalBlurry = w.pinned ? false : blurry.has(w.id);
+    const finalDuplicate = w.pinned ? false : duplicate.has(w.id);
+
     await prisma.mediaItem.update({
       where: { id: w.id },
       data: {
         status: "scored",
         // Si reusamos métricas, no pisamos la calidad ya calculada.
         ...(reused ? {} : { qualityScore: quality.get(w.id) ?? null }),
-        isBlurry: blurry.has(w.id),
-        isDuplicate: duplicate.has(w.id),
+        isBlurry: finalBlurry,
+        isDuplicate: finalDuplicate,
         dupGroup: groupOf.get(w.id) ?? null,
         moment: momentKey,
         ...(m ? { width: m.width || null, height: m.height || null } : {}),
-        caption: label ? `${label}${w.guestName ? ` · ${w.guestName}` : ""}` : null,
-        selected: selected.has(w.id),
+        caption: (() => {
+          // Etiqueta preferida: la del momento detectado por IA, si existe.
+          const aiLabel = aiMoment.get(w.id);
+          const base = aiLabel || label;
+          return base ? `${base}${w.guestName ? ` · ${w.guestName}` : ""}` : null;
+        })(),
+        selected: finalSelected,
       },
     });
   }

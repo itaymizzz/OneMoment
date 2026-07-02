@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import SharePanel from "./SharePanel";
 import Gallery from "./Gallery";
 import ReelStudio from "./ReelStudio";
+import EventTabs from "./EventTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,8 @@ export default async function EventDashboard({
             </p>
           </div>
         </header>
+
+        <EventTabs eventId={event.id} />
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]">
           {/* Panel de compartir / QR */}

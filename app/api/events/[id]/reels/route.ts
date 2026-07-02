@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { prisma } from "@/lib/db";
-import { ensureReelsDir } from "@/lib/storage";
+import { ensureReelsDir, readMedia, saveBuffer } from "@/lib/storage";
 import { renderReel } from "@/lib/render";
 import { MOMENTS, MOMENT_LABEL } from "@/lib/types";
+import { pickTrack, beatAlignClips, type Track } from "@/lib/music";
+import { ai } from "@/lib/ai/config";
+import { enhancePhoto, enhancedName } from "@/lib/ai/enhance";
+import { generateEventTrack } from "@/lib/ai/music-gen";
+import { detectBeats } from "@/lib/ai/beats";
+import { resolveLut, applyLut } from "@/lib/ai/grade";
 import {
   FPS,
   reelFormatSchema,
@@ -69,11 +75,23 @@ export async function POST(
   // borroso / no duplicado mejor puntuado.
   const cfg = FORMAT_CFG[format];
   let media = await prisma.mediaItem.findMany({
-    where: { eventId: id, selected: true, isBlurry: false, isDuplicate: false },
+    where: {
+      eventId: id,
+      selected: true,
+      isBlurry: false,
+      isDuplicate: false,
+      hidden: false,
+    },
   });
   if (media.length === 0) {
     media = await prisma.mediaItem.findMany({
-      where: { eventId: id, isBlurry: false, isDuplicate: false, status: "scored" },
+      where: {
+        eventId: id,
+        isBlurry: false,
+        isDuplicate: false,
+        hidden: false,
+        status: "scored",
+      },
       orderBy: { qualityScore: "desc" },
       take: cfg.maxClips,
     });
@@ -94,26 +112,84 @@ export async function POST(
   });
   media = media.slice(0, cfg.maxClips);
 
+  // ── Mejora IA opcional de las fotos seleccionadas (fal.ai) ──
+  // Si hay FAL_KEY, mejoramos (upscale/restauración) y cacheamos el resultado.
+  const enhanced = new Set<string>();
+  if (ai.fal) {
+    for (const m of media) {
+      if (m.kind === "video") continue;
+      try {
+        const buf = await readMedia(m.eventId, m.filename);
+        const out = await enhancePhoto(buf);
+        if (out) {
+          await saveBuffer(m.eventId, enhancedName(m.filename), out);
+          enhanced.add(m.id);
+        }
+      } catch {
+        /* si falla una foto, usamos la original */
+      }
+    }
+  }
+
   const clips: ReelClip[] = media.map((m) => {
     const isVideo = m.kind === "video";
     const secs = isVideo
       ? Math.min(m.durationS ?? cfg.photoSec, cfg.videoCapSec)
       : cfg.photoSec;
+    const v = enhanced.has(m.id) ? "?v=enhanced" : "";
     return {
       id: m.id,
-      url: `${baseUrl()}/api/media/${m.id}`,
+      url: `${baseUrl()}/api/media/${m.id}${v}`,
       kind: isVideo ? "video" : "photo",
       label: m.moment ? MOMENT_LABEL[m.moment]?.label ?? "" : "",
       durationInFrames: Math.max(1, Math.round(secs * FPS)),
     };
   });
 
+  // ── Música: generada a medida (si hay clave) o del catálogo local ──
+  const gen =
+    ai.suno || ai.elevenlabs ? await generateEventTrack(id, format) : null;
+  let track: Track;
+  if (gen) {
+    const energy: Track["energy"] =
+      format === "reel" ? "upbeat" : format === "trailer" ? "warm" : "calm";
+    track = { id: "gen", title: "IA", file: gen.url, bpm: gen.bpm, beatOffsetSec: 0, energy };
+  } else {
+    track = pickTrack(format, id);
+  }
+
+  // ── Detección real de beats (opcional, sólo pistas de tempo incierto) ──
+  // Las pistas del catálogo tienen BPM conocido. Las generadas por IA declaran
+  // el BPM del prompt, pero el audio real puede desviarse; si hay Music.ai,
+  // medimos el BPM/primer beat reales para que la rejilla y el pulso encajen.
+  if (gen && ai.musicai) {
+    const detected = await detectBeats(`${baseUrl()}${track.file}`);
+    if (detected) {
+      track = {
+        ...track,
+        bpm: detected.bpm,
+        beatOffsetSec: detected.beats[0] ?? track.beatOffsetSec,
+      };
+    }
+  }
+
+  // Ajustamos las duraciones de los clips a la rejilla de beats.
+  const alignedClips = beatAlignClips(clips, track);
+
+  // Gradación de color: si hay un LUT 3D activado (GRADE_LUT), renderizamos sin
+  // el look CSS y lo aplica FFmpeg después (más exacto, "de cine"). Si no, el
+  // look cinematográfico CSS de siempre.
+  const lut = resolveLut();
+
   const inputProps: ReelProps = {
     format,
     title: event.name,
     subtitle: event.hostName ? `Organiza ${event.hostName}` : "",
-    clips,
-    audioUrl: null, // coloca un mp3 y pásalo aquí para música de fondo
+    clips: alignedClips,
+    audioUrl: `${baseUrl()}${track.file}`,
+    bpm: track.bpm,
+    beatOffsetSec: track.beatOffsetSec,
+    look: lut ? "none" : "cinematic",
   };
 
   const reel = await prisma.reel.create({
@@ -124,6 +200,10 @@ export async function POST(
     const dir = await ensureReelsDir(id);
     const outPath = path.join(dir, `${reel.id}.mp4`);
     await renderReel(inputProps, outPath);
+
+    // Pase de color con LUT 3D (si está activado). Si falla, el reel queda sin
+    // gradar pero íntegro; no abortamos el render por esto.
+    if (lut) await applyLut(outPath, lut);
 
     const done = await prisma.reel.update({
       where: { id: reel.id },

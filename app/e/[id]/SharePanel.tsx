@@ -20,9 +20,33 @@ export default function SharePanel({
   const [copied, setCopied] = useState(false);
 
   async function copy() {
-    await navigator.clipboard.writeText(joinUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    // `navigator.clipboard` sólo existe en contexto seguro (HTTPS/localhost);
+    // si no, caemos a execCommand. Sólo mostramos "¡Copiado!" si funcionó.
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(joinUrl);
+        ok = true;
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = joinUrl;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+    } catch {
+      ok = false;
+    }
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } else {
+      // Último recurso: seleccionamos el link para que lo copie a mano.
+      window.prompt("Copia el link:", joinUrl);
+    }
   }
 
   async function share() {
@@ -80,6 +104,15 @@ export default function SharePanel({
         className="mt-2 flex items-center justify-center gap-1.5 text-center text-xs text-muted transition-colors hover:text-foreground"
       >
         <DownloadIcon width={13} height={13} /> Descargar QR para imprimir
+      </a>
+
+      <a
+        href={joinUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 block text-center text-xs text-muted underline underline-offset-2 transition-colors hover:text-foreground"
+      >
+        Ver cómo lo ven los invitados ↗
       </a>
     </aside>
   );

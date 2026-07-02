@@ -24,6 +24,20 @@ model Event {
   guests Guest[]
   media  MediaItem[]
   reels  Reel[]
+  tracks Track[]
+}
+
+// Una pista de música subida para el evento (banda sonora de los reels).
+model Track {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name      String // nombre legible (canción)
+  filename  String // nombre en disco
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
 }
 
 // Un invitado que sube contenido. Identificado por nombre + cookie/sesión, sin login.
@@ -67,6 +81,10 @@ model MediaItem {
   faceCount   Int     @default(0)
   caption     String? // descripción generada por IA
   selected    Boolean @default(false) // entró en el "mejor de"
+
+  // ----- Anulación manual del dueño (gana sobre la IA) -----
+  pinned Boolean @default(false) // forzar DENTRO de la película (aunque la IA no la eligiera)
+  hidden Boolean @default(false) // forzar FUERA de la película (aunque la IA la eligiera)
 
   @@index([eventId, status])
   @@index([eventId, moment])

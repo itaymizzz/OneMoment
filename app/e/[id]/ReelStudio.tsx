@@ -43,6 +43,34 @@ export default function ReelStudio({ eventId }: { eventId: string }) {
       .catch(() => {});
   }, [eventId]);
 
+  // Mientras haya algún render en curso (por ejemplo uno que sigue en el
+  // servidor tras recargar la página, o una petición que se cortó), sondeamos
+  // el estado hasta que termine o falle — así el video aparece solo, sin
+  // recargar a mano. Pausamos si la pestaña está en segundo plano.
+  const pending = reels.some(
+    (r) => r.status === "rendering" || r.status === "queued",
+  );
+  useEffect(() => {
+    if (!pending) return;
+    let stop = false;
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch(`/api/events/${eventId}/reels`);
+        if (!res.ok) return;
+        const d = await res.json();
+        if (!stop && d.reels) setReels(d.reels);
+      } catch {
+        /* reintenta en el siguiente tick */
+      }
+    };
+    const iv = setInterval(tick, 4000);
+    return () => {
+      stop = true;
+      clearInterval(iv);
+    };
+  }, [pending, eventId]);
+
   async function generate(format: ReelFormat) {
     if (busy) return;
     setBusy(format);
@@ -150,23 +178,35 @@ export default function ReelStudio({ eventId }: { eventId: string }) {
           {reels.map((r) => (
             <div
               key={r.id}
-              className="flex items-center justify-between rounded-lg border border-border px-3 py-1.5 text-xs"
+              className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-1.5 text-xs"
             >
               <span>{FORMAT_LABEL[r.format] ?? r.format}</span>
-              <span
-                className={
-                  r.status === "done"
-                    ? "text-accent"
+              <span className="flex items-center gap-2">
+                <span
+                  className={
+                    r.status === "done"
+                      ? "text-accent"
+                      : r.status === "failed"
+                        ? "text-red-400"
+                        : "text-muted"
+                  }
+                >
+                  {r.status === "done"
+                    ? "listo"
                     : r.status === "failed"
-                      ? "text-red-400"
-                      : "text-muted"
-                }
-              >
-                {r.status === "done"
-                  ? "listo"
-                  : r.status === "failed"
-                    ? "falló"
-                    : "renderizando…"}
+                      ? "falló"
+                      : "renderizando…"}
+                </span>
+                {r.status === "done" && r.outputUrl && (
+                  <a
+                    href={r.outputUrl}
+                    download={`onemoment-${r.format}.mp4`}
+                    className="inline-flex items-center gap-1 text-muted hover:text-foreground"
+                    aria-label={`Descargar ${FORMAT_LABEL[r.format] ?? r.format}`}
+                  >
+                    <DownloadIcon width={13} height={13} />
+                  </a>
+                )}
               </span>
             </div>
           ))}

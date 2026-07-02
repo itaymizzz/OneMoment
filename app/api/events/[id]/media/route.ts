@@ -75,6 +75,16 @@ export async function POST(
     return NextResponse.json({ error: "No se recibieron archivos" }, { status: 400 });
   }
 
+  // Metadatos opcionales que el cliente extrae de los videos (sharp no los lee).
+  const num = (k: string) => {
+    const v = form.get(k);
+    const n = typeof v === "string" ? Number(v) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const metaDurationS = num("durationS");
+  const metaWidth = num("width");
+  const metaHeight = num("height");
+
   const ids: string[] = [];
   const skipped: string[] = [];
 
@@ -102,6 +112,10 @@ export async function POST(
         filename,
         mimeType: file.type,
         status: "pending", // la capa de IA (task 5) lo recoge desde aquí
+        // Para video guardamos lo que mandó el cliente (la IA lo usa para rankear).
+        ...(isVideo
+          ? { durationS: metaDurationS, width: metaWidth, height: metaHeight }
+          : {}),
       },
       select: { id: true },
     });

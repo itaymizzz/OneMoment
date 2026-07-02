@@ -104,3 +104,36 @@ export const QrIcon = (p: IconProps) => (
     <path d="M14 14h3v3M21 21v.01M14 21h3" />
   </svg>
 );
+
+export const PrinterIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+    <rect width="12" height="8" x="6" y="14" rx="1" />
+  </svg>
+);
+
+export const HomeIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M3 10.5 12 3l9 7.5" />
+    <path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5" />
+  </svg>
+);
+
+export const HeartIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 20.5 4.2 12.7a4.6 4.6 0 0 1 6.5-6.5l1.3 1.3 1.3-1.3a4.6 4.6 0 0 1 6.5 6.5Z" />
+  </svg>
+);
+
+export const StarIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m12 2.5 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 21l-5.8 3 1.1-6.5-4.7-4.6 6.5-.9L12 2.5Z" />
+  </svg>
+);
+
+export const EyeOffIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9.9 5A9.8 9.8 0 0 1 12 4.8c5 0 8.5 4 9.5 6a12 12 0 0 1-2.2 3M6.6 6.6C4 8 2.5 10.2 2 11.8c1 2 4.5 6 10 6a9.9 9.9 0 0 0 4.4-1" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20" />
+  </svg>
+);

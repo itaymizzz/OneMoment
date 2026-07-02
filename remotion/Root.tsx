@@ -35,6 +35,9 @@ export const RemotionRoot = () => {
         subtitle: "29 · 06 · 2026",
         clips: [],
         audioUrl: null,
+        bpm: null,
+        beatOffsetSec: 0,
+        look: "cinematic" as const,
       }}
       calculateMetadata={calculateMetadata}
     />
