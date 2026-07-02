@@ -41,6 +41,10 @@ export async function renderReel(
     // pesado, pero las fotos se ven nítidas dentro del video.
     jpegQuality: 100,
     crf: 18,
+    // CRÍTICO: yuv420p. Sin esto salía yuv444p (High 4:4:4), que los
+    // navegadores y móviles NO pueden decodificar → el video se veía en negro
+    // / "la foto no aparece". yuv420p reproduce en todos lados.
+    pixelFormat: "yuv420p",
     // ── Memoria acotada (para que no reviente en un contenedor pequeño) ──
     // Remotion por defecto abre 1 pestaña de Chrome por núcleo → mucha RAM y
     // OOM en instancias chicas (Railway devolvía "upstream error" al morir el

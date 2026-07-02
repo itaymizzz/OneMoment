@@ -302,26 +302,6 @@ function ClipFrame({
           pointerEvents: "none",
         }}
       />
-      <CornerFps fps={fps} />
-    </AbsoluteFill>
-  );
-}
-
-function CornerFps({ fps }: { fps: number }) {
-  const frame = useCurrentFrame();
-  const secs = (frame / fps).toFixed(1);
-  return (
-    <AbsoluteFill style={{ padding: 40, alignItems: "flex-end" }}>
-      <div
-        style={{
-          fontFamily: "monospace",
-          fontSize: 22,
-          color: "rgba(255,255,255,0.7)",
-          letterSpacing: 2,
-        }}
-      >
-        ● {secs}s
-      </div>
     </AbsoluteFill>
   );
 }
