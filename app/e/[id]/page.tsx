@@ -45,6 +45,18 @@ export default async function EventDashboard({
               {event._count.media} archivos · {event._count.guests} invitados
             </p>
           </div>
+          <a
+            href={`/e/${event.id}/wall`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary inline-flex cursor-pointer items-center gap-2 px-4 py-2 text-sm"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-black/60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-black/80" />
+            </span>
+            Muro en vivo ↗
+          </a>
         </header>
 
         <EventTabs eventId={event.id} />

@@ -59,6 +59,30 @@ body {
   }
 }
 
+/* ── Muro en vivo (slideshow para TV/proyector) ── */
+@keyframes wallFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes kenburns {
+  from { transform: scale(1.04); }
+  to { transform: scale(1.16); }
+}
+.wall-slide {
+  animation: wallFade 0.9s ease both;
+}
+.wall-slide .wall-media {
+  animation: kenburns 8s ease-out both;
+}
+@keyframes wallPop {
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.02); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.wall-new-badge {
+  animation: wallPop 0.5s ease both;
+}
+
 /* Fondo con un sutil halo de luz tipo escenario */
 .stage-bg {
   background:

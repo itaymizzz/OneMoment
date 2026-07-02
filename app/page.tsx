@@ -234,6 +234,7 @@ export default function Home() {
                 {[
                   ["Recolección por QR, sin instalar apps", true, true],
                   ["Galería del evento", true, true],
+                  ["Muro de fotos en vivo (TV/proyector)", true, true],
                   ["Calidad original (sin compresión)", true, true],
                   ["Descarta borrosas y duplicadas con IA", false, true],
                   ["Detecta los mejores momentos", false, true],
