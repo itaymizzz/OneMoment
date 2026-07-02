@@ -33,13 +33,17 @@ const VIBE_BY_FORMAT: Record<ReelFormat, Vibe> = {
   },
 };
 
-const OUT_DIR = path.join(process.cwd(), "public", "music", "generated");
+// Guardamos en el volumen persistente (no en public/, que Next no sirve en
+// runtime) y lo exponemos vía /api/music/<archivo>.
+const STORAGE_ROOT =
+  process.env.STORAGE_ROOT || path.join(process.cwd(), "storage");
+const OUT_DIR = path.join(STORAGE_ROOT, "music-gen");
 
 async function saveTrack(id: string, buf: Buffer, ext: string): Promise<string> {
   await fs.mkdir(OUT_DIR, { recursive: true });
   const file = `${id}.${ext}`;
   await fs.writeFile(path.join(OUT_DIR, file), buf);
-  return `/music/generated/${file}`;
+  return `/api/music/${file}`;
 }
 
 // ElevenLabs Music API. Devuelve buffer mp3 o null.
@@ -173,7 +177,7 @@ export async function generateEventTrack(
     const p = path.join(OUT_DIR, `${id}.${ext}`);
     try {
       await fs.access(p);
-      return { url: `/music/generated/${id}.${ext}`, bpm: vibe.bpm };
+      return { url: `/api/music/${id}.${ext}`, bpm: vibe.bpm };
     } catch {
       /* no existe, seguimos */
     }
