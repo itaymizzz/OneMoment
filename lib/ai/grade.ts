@@ -103,6 +103,9 @@ export function applyLut(mp4Path: string, lutFile: string): Promise<boolean> {
         "-c:a", "copy",
         "-crf", "18",
         "-preset", "medium",
+        // yuv420p: este es el encode FINAL (gana sobre el de Remotion). Sin
+        // esto sale yuv444p y los navegadores/móviles no lo reproducen.
+        "-pix_fmt", "yuv420p",
         outPath,
       ],
       { cwd },
