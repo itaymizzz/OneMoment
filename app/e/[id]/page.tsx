@@ -5,12 +5,9 @@ import SharePanel from "./SharePanel";
 import Gallery from "./Gallery";
 import ReelStudio from "./ReelStudio";
 import EventTabs from "./EventTabs";
+import { baseUrl } from "@/lib/base-url";
 
 export const dynamic = "force-dynamic";
-
-function baseUrl() {
-  return process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-}
 
 export default async function EventDashboard({
   params,

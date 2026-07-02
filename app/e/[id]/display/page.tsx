@@ -4,12 +4,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import EventTabs from "../EventTabs";
 import DisplayDesigner from "./DisplayDesigner";
+import { baseUrl } from "@/lib/base-url";
 
 export const dynamic = "force-dynamic";
-
-function baseUrl() {
-  return process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-}
 
 export default async function DisplayPage({
   params,

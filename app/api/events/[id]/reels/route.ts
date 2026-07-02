@@ -10,6 +10,7 @@ import { enhancePhoto, enhancedName } from "@/lib/ai/enhance";
 import { generateEventTrack } from "@/lib/ai/music-gen";
 import { detectBeats } from "@/lib/ai/beats";
 import { resolveLut, applyLut } from "@/lib/ai/grade";
+import { baseUrl } from "@/lib/base-url";
 import {
   FPS,
   reelFormatSchema,
@@ -31,10 +32,6 @@ const FORMAT_CFG: Record<
 };
 
 const MOMENT_ORDER = new Map(MOMENTS.map((m, i) => [m.key, i]));
-
-function baseUrl() {
-  return process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-}
 
 export async function GET(
   _req: NextRequest,
