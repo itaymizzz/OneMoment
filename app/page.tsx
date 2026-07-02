@@ -19,6 +19,33 @@ const EVENT_TYPES = [
   { value: "other", label: "✨ Otro" },
 ];
 
+const FAQ = [
+  {
+    q: "¿Cuánto cuesta?",
+    a: "Gratis durante la beta. Después será un pago único por evento (sin suscripción), en la línea de lo que cobra el mercado.",
+  },
+  {
+    q: "¿Mis invitados tienen que instalar una app?",
+    a: "No. Escanean el QR y suben sus fotos y videos desde el navegador del teléfono, sin descargar nada.",
+  },
+  {
+    q: "¿Se pierde calidad al subir?",
+    a: "No. Guardamos los archivos en su calidad original, sin la compresión que aplica WhatsApp.",
+  },
+  {
+    q: "¿Qué hace exactamente la IA?",
+    a: "Descarta fotos borrosas y duplicadas, detecta los mejores momentos y arma automáticamente el reel, el tráiler y la película del evento, con música y edición al ritmo.",
+  },
+  {
+    q: "¿Para qué eventos sirve?",
+    a: "Bodas, cumpleaños, eventos corporativos, graduaciones y fiestas: cualquier momento donde varias personas capturan a la vez.",
+  },
+  {
+    q: "¿Cuánto tarda en estar lista la película?",
+    a: "Se genera cuando la pides. Un reel corto está en minutos; los formatos largos tardan un poco más.",
+  },
+];
+
 export default function Home() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -66,6 +93,17 @@ export default function Home() {
             Al terminar, la IA arma automáticamente el reel, el tráiler y la
             película — sin duplicados, sin borrosas, con los mejores momentos.
           </p>
+          <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-2 text-xs text-muted">
+            <span className="rounded-full border border-border px-3 py-1">
+              Sin instalar apps
+            </span>
+            <span className="rounded-full border border-border px-3 py-1">
+              Calidad original · sin la compresión de WhatsApp
+            </span>
+            <span className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1 font-medium text-accent">
+              Gratis durante la beta
+            </span>
+          </div>
         </div>
 
         {/* Formulario de creación */}
@@ -168,49 +206,134 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Testimonios */}
+        {/* Comparación vs competencia */}
         <div className="mx-auto mt-24 max-w-4xl">
           <h2 className="font-display text-center text-3xl font-semibold md:text-4xl">
-            La noche entera, contada por todos
+            Los demás te dan una carpeta.
+            <br />
+            <span className="gradient-text">OneMoment te entrega la película.</span>
           </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-center text-muted">
+            Las apps de fotos por QR juntan los archivos y ahí se quedan. OneMoment
+            los convierte en un video editado, listo para compartir.
+          </p>
+          <div className="mt-10 overflow-hidden rounded-2xl border border-border">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-card">
+                  <th className="px-4 py-3 font-medium text-muted">Función</th>
+                  <th className="px-4 py-3 text-center font-medium text-muted">
+                    Otras apps de fotos
+                  </th>
+                  <th className="px-4 py-3 text-center font-semibold text-accent">
+                    OneMoment
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Recolección por QR, sin instalar apps", true, true],
+                  ["Galería del evento", true, true],
+                  ["Calidad original (sin compresión)", true, true],
+                  ["Descarta borrosas y duplicadas con IA", false, true],
+                  ["Detecta los mejores momentos", false, true],
+                  ["Reel, tráiler y película automáticos", false, true],
+                  ["Música y edición cinematográfica con IA", false, true],
+                ].map(([label, other, us], i) => (
+                  <tr key={i} className="border-b border-border last:border-0">
+                    <td className="px-4 py-3">{label as string}</td>
+                    <td className="px-4 py-3 text-center">
+                      <Mark on={other as boolean} />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Mark on={us as boolean} accent />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Ejemplos ilustrativos (NO testimonios reales — se marcan como ejemplos
+            para no arriesgar la confianza de la marca hasta tener casos reales). */}
+        <div className="mx-auto mt-24 max-w-4xl">
+          <div className="text-center">
+            <span className="inline-block rounded-full border border-border px-3 py-1 text-xs uppercase tracking-wide text-muted">
+              Ejemplos
+            </span>
+            <h2 className="font-display mt-4 text-3xl font-semibold md:text-4xl">
+              Cómo se vive un evento con OneMoment
+            </h2>
+            <p className="mt-2 text-sm text-muted">
+              Escenarios de ejemplo de lo que hace la app. (Aún no publicamos
+              testimonios; los añadiremos con eventos reales.)
+            </p>
+          </div>
           <div className="mt-10 grid gap-6 md:grid-cols-3">
             {[
               {
-                q: "Recibimos 2.400 fotos de 180 invitados. Al día siguiente teníamos un reel listo para Instagram. Lloré.",
-                a: "Sofía R.",
-                r: "Novia",
+                q: "180 invitados suben 2.400 fotos durante la boda. Al día siguiente hay un reel listo para Instagram.",
+                r: "Boda · 180 invitados",
               },
               {
-                q: "Cinco personas grabaron el primer baile. La IA las unió como si hubiera un director de cine.",
-                a: "Daniel M.",
-                r: "Wedding planner",
+                q: "Cinco personas graban el primer baile desde ángulos distintos. La IA los une como un montaje de cine.",
+                r: "Primer baile · multicámara",
               },
               {
-                q: "Nadie instaló nada. Escanearon el QR de la mesa y empezaron a subir. Magia.",
-                a: "Lucía & Tomás",
-                r: "Anfitriones",
+                q: "Nadie instala nada: escanean el QR de la mesa y empiezan a subir en segundos.",
+                r: "Cero fricción · solo QR",
               },
-            ].map((t) => (
-              <figure key={t.a} className="card flex flex-col p-6">
+            ].map((t, i) => (
+              <figure key={i} className="card flex flex-col p-6">
                 <blockquote className="flex-1 text-sm leading-relaxed text-foreground/90">
-                  “{t.q}”
+                  {t.q}
                 </blockquote>
-                <figcaption className="mt-4 flex items-center gap-3">
-                  <span
-                    aria-hidden
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent"
-                  >
-                    {t.a.charAt(0)}
-                  </span>
-                  <span className="text-sm">
-                    <span className="font-medium">{t.a}</span>
-                    <span className="block text-xs text-muted">{t.r}</span>
-                  </span>
+                <figcaption className="mt-4 text-xs font-medium text-accent">
+                  {t.r}
                 </figcaption>
               </figure>
             ))}
           </div>
         </div>
+
+        {/* FAQ (contenido + schema para SEO) */}
+        <div className="mx-auto mt-24 max-w-3xl">
+          <h2 className="font-display text-center text-3xl font-semibold md:text-4xl">
+            Preguntas frecuentes
+          </h2>
+          <div className="mt-10 space-y-3">
+            {FAQ.map((f) => (
+              <details
+                key={f.q}
+                className="card group p-5 [&_summary]:cursor-pointer"
+              >
+                <summary className="flex items-center justify-between font-medium">
+                  {f.q}
+                  <span className="text-muted transition-transform group-open:rotate-45">
+                    +
+                  </span>
+                </summary>
+                <p className="mt-3 text-sm text-muted">{f.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              mainEntity: FAQ.map((f) => ({
+                "@type": "Question",
+                name: f.q,
+                acceptedAnswer: { "@type": "Answer", text: f.a },
+              })),
+            }),
+          }}
+        />
 
         {/* CTA final */}
         <div className="mx-auto mt-24 max-w-2xl text-center">
@@ -234,5 +357,24 @@ export default function Home() {
         </div>
       </div>
     </main>
+  );
+}
+
+// Marca de una función en la tabla comparativa: ✓ (sí) o — (no).
+function Mark({ on, accent }: { on: boolean; accent?: boolean }) {
+  if (!on) {
+    return (
+      <span aria-label="No incluido" className="text-muted/50">
+        —
+      </span>
+    );
+  }
+  return (
+    <span
+      aria-label="Incluido"
+      className={accent ? "font-semibold text-accent" : "text-foreground/70"}
+    >
+      ✓
+    </span>
   );
 }
