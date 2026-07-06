@@ -7,8 +7,18 @@ import {
   CheckIcon,
   PlayIcon,
 } from "@/app/components/icons";
+import {
+  putPending,
+  deletePending,
+  listPending,
+  type PendingUpload,
+} from "./upload-queue";
 
 type Phase = "name" | "ready";
+
+// "pending" = en cola (sin conexión o esperando reintento); "uploading" = subiendo
+// ahora; "error" = agotó los reintentos (el invitado puede tocar para reintentar).
+type Status = "pending" | "uploading" | "done" | "error";
 
 type Item = {
   id: string;
@@ -16,14 +26,22 @@ type Item = {
   url: string;
   isVideo: boolean;
   progress: number; // 0..100
-  status: "uploading" | "done" | "error";
-  file: File; // guardamos el archivo para poder reintentar si falla.
+  status: Status;
+  file: Blob; // el archivo (o Blob rehidratado de IndexedDB) para poder reintentar.
 };
+
+// Reintentos con espera creciente: en un salón con WiFi saturado un fallo suele
+// ser temporal, así que reintentamos solos antes de rendirnos.
+const MAX_ATTEMPTS = 4;
+const BACKOFF_MS = [1200, 3000, 6000]; // esperas antes del intento 2, 3 y 4
+const UPLOAD_TIMEOUT_MS = 90_000; // corta subidas colgadas (conexión muerta)
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Lee duración y dimensiones de un video en el navegador (sharp no puede en
 // el servidor). La IA usa esto para elegir solo los mejores videos.
 function readVideoMeta(
-  file: File,
+  file: Blob,
 ): Promise<{ durationS?: number; width?: number; height?: number }> {
   return new Promise((resolve) => {
     const v = document.createElement("video");
@@ -44,15 +62,18 @@ function readVideoMeta(
 }
 
 // Sube un solo archivo con XHR para poder mostrar progreso real de subida.
+// `file` puede ser un File (sesión actual) o un Blob rehidratado de IndexedDB
+// (al reanudar tras recargar); por eso pasamos también nombre y tipo.
 async function uploadOne(
   eventId: string,
   guestId: string,
-  file: File,
+  file: Blob,
+  fileName: string,
   onProgress: (pct: number) => void,
 ): Promise<boolean> {
   const fd = new FormData();
   fd.append("guestId", guestId);
-  fd.append("files", file);
+  fd.append("files", file, fileName);
   if (file.type.startsWith("video/")) {
     const m = await readVideoMeta(file);
     if (m.durationS) fd.append("durationS", String(m.durationS));
@@ -63,11 +84,13 @@ async function uploadOne(
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/events/${eventId}/media`);
+    xhr.timeout = UPLOAD_TIMEOUT_MS; // no dejamos subidas colgadas para siempre
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
     xhr.onerror = () => resolve(false);
+    xhr.ontimeout = () => resolve(false);
     xhr.send(fd);
   });
 }
@@ -87,6 +110,17 @@ export default function Uploader({
   const [items, setItems] = useState<Item[]>([]);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
+  // Espejos en ref para que los listeners async (resume, online) vean siempre el
+  // valor más reciente sin cerrar sobre un estado viejo.
+  const guestIdRef = useRef<string | null>(null);
+  const itemsRef = useRef<Item[]>([]);
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    guestIdRef.current = guestId;
+  }, [guestId]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   // Recordamos al invitado en este dispositivo para que no escriba el nombre cada vez.
   useEffect(() => {
@@ -104,6 +138,47 @@ export default function Uploader({
       /* noop */
     }
   }, [eventId]);
+
+  // Al cargar (p. ej. tras recargar a mitad del evento) reanudamos las subidas
+  // que quedaron pendientes en IndexedDB para este invitado. Se ejecuta una vez.
+  useEffect(() => {
+    if (phase !== "ready" || !guestId || resumedRef.current) return;
+    resumedRef.current = true;
+    (async () => {
+      const pending = await listPending(eventId);
+      const known = new Set(itemsRef.current.map((i) => i.id));
+      const restored: Item[] = pending
+        .filter((p: PendingUpload) => p.guestId === guestId && !known.has(p.id))
+        .map((p: PendingUpload) => ({
+          id: p.id,
+          name: p.fileName,
+          url: URL.createObjectURL(p.blob),
+          isVideo: p.isVideo,
+          progress: 0,
+          status: "pending" as Status,
+          file: p.blob,
+        }));
+      if (restored.length === 0) return;
+      setItems((prev) => [...restored, ...prev]);
+      for (const it of restored) {
+        await runUpload(it.id, it.file, it.name);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, guestId, eventId]);
+
+  // Al recuperar la conexión, reintentamos lo que quedó en cola o con error.
+  useEffect(() => {
+    function onOnline() {
+      const stalled = itemsRef.current.filter(
+        (i) => i.status === "pending" || i.status === "error",
+      );
+      for (const it of stalled) runUpload(it.id, it.file, it.name);
+    }
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function join() {
     const clean = name.trim();
@@ -141,38 +216,54 @@ export default function Uploader({
     setGuestId(null);
     setName("");
     setItems([]);
+    resumedRef.current = false; // el próximo invitado puede reanudar lo suyo
     setPhase("name");
   }
 
-  // Sube un item concreto (usado tanto en la subida inicial como al reintentar).
-  async function runUpload(itemId: string, file: File) {
-    if (!guestId) return;
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === itemId ? { ...it, status: "uploading", progress: 0 } : it,
-      ),
-    );
-    const ok = await uploadOne(eventId, guestId, file, (pct) =>
-      setItems((prev) =>
-        prev.map((it) => (it.id === itemId ? { ...it, progress: pct } : it)),
-      ),
-    );
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === itemId
-          ? { ...it, progress: 100, status: ok ? "done" : "error" }
-          : it,
-      ),
-    );
-    if (ok) {
-      // Avisamos a la capa de IA para que procese lo recién subido.
-      fetch(`/api/events/${eventId}/process`, { method: "POST" }).catch(() => {});
+  const patch = (id: string, p: Partial<Item>) =>
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...p } : it)));
+
+  // Sube un item con reintentos + espera creciente. Persiste en IndexedDB hasta
+  // que termina con éxito, para que sobreviva a una recarga. Si no hay conexión,
+  // lo deja "pending"; el listener de `online` lo reanudará.
+  async function runUpload(itemId: string, file: Blob, fileName: string) {
+    const gid = guestIdRef.current;
+    if (!gid) return false;
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      patch(itemId, { status: "pending", progress: 0 });
+      return false;
     }
-    return ok;
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      patch(itemId, { status: "uploading", progress: 0 });
+      const ok = await uploadOne(eventId, gid, file, fileName, (pct) =>
+        patch(itemId, { progress: pct }),
+      );
+      if (ok) {
+        patch(itemId, { progress: 100, status: "done" });
+        await deletePending(itemId); // ya está a salvo en el servidor
+        // Avisamos a la capa de IA para que procese lo recién subido.
+        fetch(`/api/events/${eventId}/process`, { method: "POST" }).catch(() => {});
+        return true;
+      }
+      // Falló: si quedan intentos, esperamos (backoff) y reintentamos solos.
+      if (attempt < MAX_ATTEMPTS - 1) {
+        patch(itemId, { status: "pending" });
+        await sleep(BACKOFF_MS[attempt] ?? 6000);
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+          patch(itemId, { status: "pending" });
+          return false; // el listener de `online` lo retomará
+        }
+      }
+    }
+    patch(itemId, { status: "error" });
+    return false;
   }
 
   async function onFiles(fileList: FileList | null) {
-    if (!fileList || !guestId) return;
+    const gid = guestIdRef.current;
+    if (!fileList || !gid) return;
     const files = Array.from(fileList);
 
     // Creamos las tarjetas optimistas con preview local.
@@ -182,14 +273,31 @@ export default function Uploader({
       url: URL.createObjectURL(f),
       isVideo: f.type.startsWith("video/"),
       progress: 0,
-      status: "uploading",
+      status: "pending",
       file: f,
     }));
     setItems((prev) => [...newItems, ...prev]);
 
+    // Persistimos cada archivo ANTES de subir: si el invitado recarga a mitad,
+    // se reanuda solo. Se borra de IndexedDB al completarse la subida.
+    for (let i = 0; i < newItems.length; i++) {
+      const it = newItems[i];
+      const f = files[i];
+      await putPending({
+        id: it.id,
+        eventId,
+        guestId: gid,
+        fileName: f.name,
+        type: f.type,
+        isVideo: it.isVideo,
+        blob: f,
+        createdAt: Date.now(),
+      });
+    }
+
     // Subimos de forma secuencial para no saturar la red móvil del invitado.
     for (const item of newItems) {
-      await runUpload(item.id, item.file);
+      await runUpload(item.id, item.file, item.name);
     }
   }
 
@@ -232,8 +340,11 @@ export default function Uploader({
   }
 
   const uploadingCount = items.filter((i) => i.status === "uploading").length;
+  const pendingCount = items.filter((i) => i.status === "pending").length;
   const doneCount = items.filter((i) => i.status === "done").length;
   const errorCount = items.filter((i) => i.status === "error").length;
+  const inFlight = uploadingCount + pendingCount;
+  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
 
   return (
     <div className="mt-8">
@@ -282,17 +393,24 @@ export default function Uploader({
           }}
         />
 
-        {/* Estado de las subidas: en curso, listas y con error. */}
+        {/* Estado de las subidas: en cola/en curso, listas y con error. */}
         <div aria-live="polite" className="mt-3 min-h-[1rem] text-xs">
-          {uploadingCount > 0 && (
-            <p className="text-muted">Subiendo {uploadingCount}…</p>
+          {offline && inFlight > 0 && (
+            <p className="text-amber-400">
+              Sin conexión — {inFlight} en cola. Se subirán solas al volver la señal.
+            </p>
           )}
-          {uploadingCount === 0 && doneCount > 0 && (
+          {!offline && inFlight > 0 && (
+            <p className="text-muted">
+              Subiendo {inFlight}…{pendingCount > 0 ? ` (${pendingCount} en cola)` : ""}
+            </p>
+          )}
+          {inFlight === 0 && doneCount > 0 && (
             <p className="font-medium text-accent">
               {doneCount} {doneCount === 1 ? "recuerdo subido" : "recuerdos subidos"} ✓
             </p>
           )}
-          {uploadingCount === 0 && errorCount > 0 && (
+          {inFlight === 0 && errorCount > 0 && (
             <p className="text-red-400">
               {errorCount} sin subir — toca para reintentar.
             </p>
@@ -306,12 +424,23 @@ export default function Uploader({
             <button
               key={it.id}
               type="button"
-              disabled={it.status !== "error"}
-              onClick={() => it.status === "error" && runUpload(it.id, it.file)}
+              disabled={it.status !== "error" && it.status !== "pending"}
+              onClick={() =>
+                (it.status === "error" || it.status === "pending") &&
+                runUpload(it.id, it.file, it.name)
+              }
               className={`relative aspect-square overflow-hidden rounded-lg border border-border ${
-                it.status === "error" ? "cursor-pointer" : "cursor-default"
+                it.status === "error" || it.status === "pending"
+                  ? "cursor-pointer"
+                  : "cursor-default"
               }`}
-              aria-label={it.status === "error" ? "Reintentar subida" : undefined}
+              aria-label={
+                it.status === "error"
+                  ? "Reintentar subida"
+                  : it.status === "pending"
+                    ? "En cola — toca para subir ahora"
+                    : undefined
+              }
             >
               {it.isVideo ? (
                 <video src={it.url} className="h-full w-full object-cover" muted playsInline />
@@ -328,6 +457,11 @@ export default function Uploader({
               {it.status === "uploading" && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-xs">
                   {it.progress}%
+                </div>
+              )}
+              {it.status === "pending" && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-[10px] font-medium text-white/90">
+                  En cola
                 </div>
               )}
               {it.status === "done" && (
