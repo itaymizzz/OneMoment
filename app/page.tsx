@@ -232,7 +232,7 @@ export default function Home() {
                 <tr className="border-b border-border bg-card">
                   <th className="px-4 py-3 font-medium text-muted">Función</th>
                   <th className="px-4 py-3 text-center font-medium text-muted">
-                    Otras apps de fotos
+                    Apps de fotos por QR
                   </th>
                   <th className="px-4 py-3 text-center font-semibold text-accent">
                     OneMoment
@@ -248,7 +248,9 @@ export default function Home() {
                   ["Descarta borrosas y duplicadas con IA", false, true],
                   ["Detecta los mejores momentos", false, true],
                   ["Reel, tráiler y película automáticos", false, true],
-                  ["Música y edición cinematográfica con IA", false, true],
+                  ["Montaje con arco: gancho, clímax y cierre", false, true],
+                  ["Cortes sincronizados a la música", false, true],
+                  ["Color cinematográfico (estilo boda 2026)", false, true],
                 ].map(([label, other, us], i) => (
                   <tr key={i} className="border-b border-border last:border-0">
                     <td className="px-4 py-3">{label as string}</td>
