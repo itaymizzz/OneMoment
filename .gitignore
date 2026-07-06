@@ -44,3 +44,6 @@ next-env.d.ts
 /storage
 /prisma/*.db
 /prisma/*.db-journal
+
+# Attack map for the live unauthenticated app — keep LOCAL until security fixes land
+docs/SECURITY_AUDIT.md
