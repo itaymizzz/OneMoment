@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { customAlphabet } from "nanoid";
 import { prisma } from "@/lib/db";
 import { saveBuffer } from "@/lib/storage";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
+
+// Tope de archivos por petición: evita que una sola subida meta miles de
+// archivos y llene el volumen (la app y la base viven en el mismo disco).
+const MAX_FILES_PER_REQUEST = 40;
 
 // Nombre de archivo en disco (sin caracteres del nombre original del usuario).
 const fileId = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 16);
@@ -49,6 +54,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  // Anti-abuso: un invitado (o un bot) no debe poder inundar el almacenamiento.
+  if (!rateLimit(`upload:${clientIp(req)}`, 300, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "Demasiadas subidas. Espera un momento." }, { status: 429 });
+  }
   const event = await prisma.event.findUnique({ where: { id }, select: { id: true } });
   if (!event) {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });
@@ -70,10 +79,12 @@ export async function POST(
     guestId = guest?.id ?? null;
   }
 
-  const files = form.getAll("files").filter((f): f is File => f instanceof File);
-  if (files.length === 0) {
+  const allFiles = form.getAll("files").filter((f): f is File => f instanceof File);
+  if (allFiles.length === 0) {
     return NextResponse.json({ error: "No se recibieron archivos" }, { status: 400 });
   }
+  // Cap por petición (el cliente sube de a poco de todas formas).
+  const files = allFiles.slice(0, MAX_FILES_PER_REQUEST);
 
   // Metadatos opcionales que el cliente extrae de los videos (sharp no los lee).
   const num = (k: string) => {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { readMedia } from "@/lib/storage";
 import { enhancedName } from "@/lib/ai/normalize";
 import { videoEnhancedName } from "@/lib/ai/video-enhance";
+import { requestIsOwner } from "@/lib/owner";
 
 // Tipos que es seguro servir EN LÍNEA (el navegador los pinta, no los ejecuta).
 // Cualquier otro (p. ej. un SVG antiguo, o un MIME manipulado) se sirve como
@@ -28,6 +29,17 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  // Sólo el dueño del evento al que pertenece la pieza puede fijar/ocultar.
+  const target = await prisma.mediaItem.findUnique({
+    where: { id },
+    select: { eventId: true },
+  });
+  if (!target) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  if (!(await requestIsOwner(req, target.eventId))) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
+
   const body = (await req.json().catch(() => null)) as {
     pinned?: boolean;
     hidden?: boolean;

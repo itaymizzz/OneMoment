@@ -1,20 +1,26 @@
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
 import SharePanel from "./SharePanel";
 import Gallery from "./Gallery";
 import ReelStudio from "./ReelStudio";
 import EventTabs from "./EventTabs";
+import ClaimOwner from "./ClaimOwner";
 import { baseUrl } from "@/lib/base-url";
+import { ownerCookieName, tokenMatches } from "@/lib/owner";
 
 export const dynamic = "force-dynamic";
 
 export default async function EventDashboard({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ k?: string }>;
 }) {
   const { id } = await params;
+  const { k } = await searchParams;
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
@@ -24,6 +30,30 @@ export default async function EventDashboard({
   });
   if (!event) notFound();
 
+  // Acceso de organizador: la cookie httpOnly de este evento, o el enlace
+  // privado ?k=<token>. Sin eso, el panel no se muestra (antes bastaba conocer
+  // el id del evento — que va en la página del invitado — para tener control).
+  const cookieToken = (await cookies()).get(ownerCookieName(id))?.value;
+  const authedByCookie = tokenMatches(cookieToken, event.ownerToken);
+  const authedByLink = tokenMatches(k, event.ownerToken);
+  if (!authedByCookie && !authedByLink) {
+    return (
+      <main className="flex-1">
+        <div className="mx-auto max-w-md px-6 py-24 text-center">
+          <h1 className="font-display text-3xl font-semibold">Acceso restringido</h1>
+          <p className="mt-3 text-sm text-muted">
+            Este panel es privado del organizador del evento. Ábrelo desde el
+            dispositivo donde lo creaste, o con tu enlace privado de organizador.
+          </p>
+          <a href="/" className="btn-primary mt-6 inline-block px-5 py-2.5 text-sm">
+            Volver al inicio
+          </a>
+        </div>
+      </main>
+    );
+  }
+
+  const ownerLink = `${baseUrl()}/e/${event.id}?k=${event.ownerToken}`;
   const joinUrl = `${baseUrl()}/j/${event.slug}`;
   const qrDataUrl = await QRCode.toDataURL(joinUrl, {
     margin: 1,
@@ -33,6 +63,10 @@ export default async function EventDashboard({
 
   return (
     <main className="flex-1">
+      {/* Llegó por el enlace privado: canjea el token por cookie y limpia la URL. */}
+      {authedByLink && !authedByCookie ? (
+        <ClaimOwner eventId={event.id} token={event.ownerToken as string} />
+      ) : null}
       <div className="mx-auto max-w-6xl px-6 py-10">
         <a href="/" className="text-sm text-muted hover:text-foreground">
           ← OneMoment
@@ -60,6 +94,21 @@ export default async function EventDashboard({
         </header>
 
         <EventTabs eventId={event.id} />
+
+        {/* Enlace privado de organizador: para reabrir el panel en otro
+            dispositivo. NO es el link de invitados (ese es el QR). */}
+        <details className="mt-6 rounded-xl border border-border bg-card/50 p-4 text-sm">
+          <summary className="cursor-pointer font-medium">
+            Tu enlace privado de organizador
+          </summary>
+          <p className="mt-2 text-xs text-muted">
+            Guárdalo para volver a entrar a este panel desde otro teléfono o
+            navegador. No lo compartas con los invitados: da control del evento.
+          </p>
+          <code className="mt-3 block break-all rounded-lg bg-black/30 p-3 text-xs text-foreground/80">
+            {ownerLink}
+          </code>
+        </details>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]">
           {/* Panel de compartir / QR */}

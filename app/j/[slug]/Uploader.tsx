@@ -243,8 +243,8 @@ export default function Uploader({
       if (ok) {
         patch(itemId, { progress: 100, status: "done" });
         await deletePending(itemId); // ya está a salvo en el servidor
-        // Avisamos a la capa de IA para que procese lo recién subido.
-        fetch(`/api/events/${eventId}/process`, { method: "POST" }).catch(() => {});
+        // La IA ya NO se dispara desde aquí: el procesado (Claude/Rekognition,
+        // de pago) lo lanza el dueño al generar la película, no cada invitado.
         return true;
       }
       // Falló: si quedan intentos, esperamos (backoff) y reintentamos solos.

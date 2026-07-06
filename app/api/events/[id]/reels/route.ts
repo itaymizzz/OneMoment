@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { existsSync } from "fs";
 import { prisma } from "@/lib/db";
+import { requestIsOwner } from "@/lib/owner";
+import { processEvent } from "@/lib/process";
 import { ensureReelsDir, readMedia, saveBuffer, mediaPath } from "@/lib/storage";
 import { renderReel } from "@/lib/render";
 import { MOMENTS, MOMENT_LABEL } from "@/lib/types";
@@ -104,6 +106,24 @@ export async function POST(
   });
   if (!event) {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });
+  }
+  // Generar películas cuesta (IA + render): sólo el dueño del evento.
+  if (!(await requestIsOwner(req, id))) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
+
+  // Los invitados ya no disparan el procesado (era un vector de coste). Nos
+  // aseguramos aquí: si quedan medios sin puntuar, la IA los procesa antes de
+  // elegir el "mejor de". Si falla, seguimos con lo que haya.
+  const pending = await prisma.mediaItem.count({
+    where: { eventId: id, status: "pending" },
+  });
+  if (pending > 0) {
+    try {
+      await processEvent(id);
+    } catch {
+      /* seguimos con la selección disponible */
+    }
   }
 
   // Fuente: el "mejor de" seleccionado por la IA; si no hay, usamos lo no
