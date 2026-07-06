@@ -9,23 +9,9 @@ import {
 } from "remotion";
 import { Video } from "@remotion/media";
 import type { Look } from "./types";
-import {
-  TransitionSeries,
-  linearTiming,
-  springTiming,
-  TransitionPresentation,
-} from "@remotion/transitions";
+import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
-import { slide } from "@remotion/transitions/slide";
-import { wipe } from "@remotion/transitions/wipe";
-import { flip } from "@remotion/transitions/flip";
-import { clockWipe } from "@remotion/transitions/clock-wipe";
-import {
-  buildSegments,
-  Segment,
-  TRANSITION_FRAMES,
-  ReelProps,
-} from "./types";
+import { buildTimeline, Segment, ReelProps } from "./types";
 
 const GOLD = "#e8b04b";
 const MAGENTA = "#d65db1";
@@ -207,42 +193,10 @@ function MotionPhoto({
   );
 }
 
-// ── Transiciones variadas entre clips ──────────────────────────────────────
-// El prop `presentation` de <TransitionSeries.Transition> espera este tipo
-// genérico "abierto"; cada preset (fade/slide/clockWipe…) trae props distintas,
-// así que unificamos con un cast explícito (solo tipos, sin efecto en runtime).
-type AnyPresentation = TransitionPresentation<Record<string, unknown>>;
-
-function transitionFor(
-  i: number,
-  width: number,
-  height: number,
-  soft: boolean,
-): { presentation: AnyPresentation; durationInFrames: number } {
-  // Arranque de sección (cambió el momento): crossfade suave — "respira" y deja
-  // claro que empieza otra parte del evento.
-  if (soft) {
-    return {
-      presentation: fade() as unknown as AnyPresentation,
-      durationInFrames: TRANSITION_FRAMES,
-    };
-  }
-  // Dentro de una sección: movimientos rápidos (sin el fade plano) que cortan
-  // al ritmo — la peli se siente montada a la música, no un pase de diapositivas.
-  const list = [
-    () => slide({ direction: "from-right" }),
-    () => wipe({ direction: "from-left" }),
-    () => slide({ direction: "from-bottom" }),
-    () => flip({ direction: "from-left" }),
-    () => wipe({ direction: "from-top-left" }),
-    () => clockWipe({ width, height }),
-    () => slide({ direction: "from-top" }),
-  ];
-  return {
-    presentation: list[i % list.length]() as unknown as AnyPresentation,
-    durationInFrames: TRANSITION_FRAMES,
-  };
-}
+// Transiciones: por defecto CORTE SECO al beat (gramática de cine). Sólo los
+// cambios de sección y el outro llevan un crossfade suave — lo decide la línea
+// de tiempo (`overlapBefore` en types.ts) y aquí sólo insertamos el fade cuando
+// el solape es > 0.
 
 function ClipFrame({
   segment,
@@ -253,6 +207,9 @@ function ClipFrame({
   beats,
   downbeats,
   startFrame,
+  title,
+  subtitle,
+  dateLabel,
 }: {
   segment: Extract<Segment, { kind: "clip" }>;
   motion: Motion;
@@ -262,6 +219,11 @@ function ClipFrame({
   beats: number[];
   downbeats: number[];
   startFrame: number; // frame de inicio del clip DENTRO del reel (audio continuo)
+  // Sólo en el clip "gancho" (el primero): el título se superpone aquí en vez de
+  // ocupar una tarjeta a pantalla completa antes del reel.
+  title?: string;
+  subtitle?: string;
+  dateLabel?: string;
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -324,31 +286,46 @@ function ClipFrame({
       <AbsoluteFill
         style={{
           background:
-            "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 28%)",
+            "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 34%)",
         }}
       />
-      {clip.label ? (
+      {/* Etiqueta de momento: fuera de la zona insegura inferior (~420px que
+          tapan los iconos de Reels/TikTok). En el gancho no se muestra: manda
+          el título. */}
+      {clip.label && !title ? (
         <AbsoluteFill
           style={{
             justifyContent: "flex-end",
             alignItems: "flex-start",
-            padding: 56,
+            paddingLeft: 56,
+            paddingRight: 56,
+            paddingBottom: 470,
             opacity: labelOpacity,
             translate: `0px ${labelY}px`,
           }}
         >
           <div
             style={{
-              fontSize: 34,
+              fontSize: 42,
               fontWeight: 600,
               color: "#fff",
               letterSpacing: 0.3,
-              textShadow: "0 2px 18px rgba(0,0,0,0.6)",
+              textShadow: "0 2px 18px rgba(0,0,0,0.7)",
             }}
           >
             <span style={{ color: GOLD }}>—</span> {clip.label}
           </div>
         </AbsoluteFill>
+      ) : null}
+      {/* Título superpuesto (sólo en el gancho): lower-third elegante que aparece
+          y se va, dejando ver la mejor toma en los primeros segundos. */}
+      {title ? (
+        <TitleOverlay
+          title={title}
+          subtitle={subtitle ?? ""}
+          dateLabel={dateLabel ?? ""}
+          hold={segment.durationInFrames}
+        />
       ) : null}
       <AbsoluteFill
         style={{
@@ -360,67 +337,85 @@ function ClipFrame({
   );
 }
 
-function TitleCard({ title, subtitle }: { title: string; subtitle: string }) {
+// Título superpuesto sobre el clip gancho: aparece, se sostiene y se va DENTRO
+// de la duración del clip (`hold`), para no comerse el corte al siguiente plano.
+// Centrado (zona segura), con sombras para leerse sobre cualquier foto.
+function TitleOverlay({
+  title,
+  subtitle,
+  dateLabel,
+  hold,
+}: {
+  title: string;
+  subtitle: string;
+  dateLabel: string;
+  hold: number;
+}) {
   const frame = useCurrentFrame();
-  const opacity = interpolate(frame, [0, 14], [0, 1], {
-    extrapolateRight: "clamp",
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-  });
-  const letter = interpolate(frame, [0, 40], [10, 2], { extrapolateRight: "clamp" });
-  const lineWidth = interpolate(frame, [8, 36], [0, 220], {
+  const outStart = Math.max(18, hold - 14);
+  const opacity = interpolate(
+    frame,
+    [4, 16, outStart, hold - 2],
+    [0, 1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
+  const y = interpolate(frame, [4, 16], [14, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.16, 1, 0.3, 1),
   });
-
+  const meta = [subtitle, dateLabel].filter(Boolean).join("  ·  ");
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: BG,
         justifyContent: "center",
         alignItems: "center",
         textAlign: "center",
         padding: 80,
+        opacity,
       }}
     >
-      <AbsoluteFill
-        style={{
-          background: `radial-gradient(60% 50% at 50% 38%, ${MAGENTA}22, transparent 70%), radial-gradient(50% 40% at 50% 70%, ${GOLD}1f, transparent 70%)`,
-        }}
-      />
-      <div style={{ opacity }}>
+      <div style={{ translate: `0px ${y}px` }}>
         <div
           style={{
-            fontSize: 26,
-            letterSpacing: 8,
+            fontSize: 24,
+            letterSpacing: 7,
             textTransform: "uppercase",
             color: GOLD,
+            textShadow: "0 2px 18px rgba(0,0,0,0.75)",
           }}
         >
           OneMoment
         </div>
         <div
           style={{
-            width: lineWidth,
+            width: 180,
             height: 2,
-            margin: "28px auto",
+            margin: "20px auto",
             background: `linear-gradient(90deg, ${GOLD}, ${MAGENTA})`,
           }}
         />
         <div
           style={{
-            fontSize: 76,
+            fontSize: 70,
             fontWeight: 700,
             color: "#fff",
-            letterSpacing: letter,
             lineHeight: 1.05,
+            textShadow: "0 3px 30px rgba(0,0,0,0.8)",
           }}
         >
           {title}
         </div>
-        {subtitle ? (
-          <div style={{ marginTop: 22, fontSize: 30, color: "rgba(245,245,247,0.7)" }}>
-            {subtitle}
+        {meta ? (
+          <div
+            style={{
+              marginTop: 16,
+              fontSize: 26,
+              color: "rgba(255,255,255,0.85)",
+              textShadow: "0 2px 16px rgba(0,0,0,0.75)",
+            }}
+          >
+            {meta}
           </div>
         ) : null}
       </div>
@@ -428,7 +423,7 @@ function TitleCard({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function OutroCard() {
+function OutroCard({ dateLabel }: { dateLabel: string }) {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, 16], [0, 1], { extrapolateRight: "clamp" });
   return (
@@ -457,52 +452,40 @@ function OutroCard() {
         >
           OneMoment
         </div>
+        {dateLabel ? (
+          <div style={{ marginTop: 18, fontSize: 28, color: "rgba(245,245,247,0.55)", letterSpacing: 2 }}>
+            {dateLabel}
+          </div>
+        ) : null}
       </div>
     </AbsoluteFill>
   );
 }
 
 export function Reel(props: ReelProps) {
-  const { width, height } = useVideoConfig();
-  const segments = buildSegments(props);
-
-  // Frame de inicio de cada segmento en la línea de tiempo de salida. Como cada
-  // transición (de duración uniforme) solapa el segmento anterior y el siguiente,
-  // el segmento k arranca en (Σ duraciones[0..k-1]) − k·TRANSITION_FRAMES. Esto
-  // nos da el tiempo global de cada clip para alinear el latido con el audio.
-  const startFrames: number[] = [];
-  let sumDur = 0;
-  segments.forEach((seg, i) => {
-    startFrames.push(Math.max(0, sumDur - i * TRANSITION_FRAMES));
-    sumDur += seg.durationInFrames;
-  });
+  // Línea de tiempo compartida con el cálculo de duración (types.ts): frames de
+  // inicio y solapes por borde (0 = corte seco; >0 = crossfade).
+  const { segs, overlaps, startFrames } = buildTimeline(props);
 
   const children: React.ReactNode[] = [];
   let clipIndex = 0;
-  segments.forEach((seg, i) => {
-    if (i > 0) {
-      const soft = seg.kind === "clip" && seg.clip.sectionStart;
-      const t = transitionFor(i, width, height, soft);
+  segs.forEach((seg, i) => {
+    // Sólo insertamos transición donde hay solape (cambio de sección u outro);
+    // el resto son cortes secos: Sequences consecutivas sin Transition.
+    if (overlaps[i] > 0) {
       children.push(
         <TransitionSeries.Transition
           key={`t-${i}`}
-          presentation={t.presentation}
-          timing={
-            soft
-              ? linearTiming({ durationInFrames: t.durationInFrames })
-              : i % 3 === 0
-                ? springTiming({ config: { damping: 200 }, durationInFrames: t.durationInFrames })
-                : linearTiming({ durationInFrames: t.durationInFrames })
-          }
+          presentation={fade()}
+          timing={linearTiming({ durationInFrames: overlaps[i] })}
         />,
       );
     }
     let content: React.ReactNode;
-    if (seg.kind === "title") {
-      content = <TitleCard title={props.title} subtitle={props.subtitle} />;
-    } else if (seg.kind === "outro") {
-      content = <OutroCard />;
+    if (seg.kind === "outro") {
+      content = <OutroCard dateLabel={props.dateLabel} />;
     } else {
+      const isHook = clipIndex === 0;
       content = (
         <ClipFrame
           segment={seg}
@@ -513,6 +496,9 @@ export function Reel(props: ReelProps) {
           beats={props.beats}
           downbeats={props.downbeats}
           startFrame={startFrames[i]}
+          title={isHook ? props.title : undefined}
+          subtitle={isHook ? props.subtitle : undefined}
+          dateLabel={isHook ? props.dateLabel : undefined}
         />
       );
       clipIndex++;

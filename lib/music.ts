@@ -141,11 +141,47 @@ export function pickTrack(
   return pool[idx];
 }
 
-// Cuántos beats dura cada clip según energía y tipo. Los videos ocupan más
-// beats (para que se aprecie el movimiento), acotados por su propia duración.
-function beatsForClip(energy: Energy, clip: ReelClip, spb: number): number {
+// Beats base de una FOTO según su posición en el reel: un arco, no un ritmo
+// plano. Gancho sostenido → intro que respira → subida que se acelera → drop y
+// fiesta con cortes rápidos → plano de cierre largo y calmado. Esto es lo que
+// diferencia una edición profesional de un pase de diapositivas.
+function basePhotoBeats(energy: Energy, index: number, total: number): number {
+  const p = total > 1 ? index / (total - 1) : 0;
+  const isHook = index === 0;
+  const isLast = index === total - 1;
+  if (energy === "upbeat") {
+    if (isHook) return 4; // gancho: se sostiene ~2s
+    if (isLast) return 6; // cierre: plano largo
+    if (p < 0.22) return 4; // intro
+    if (p < 0.45) return 3; // subida (acelerando)
+    return 2; // drop + fiesta: cortes rápidos al beat
+  }
+  if (energy === "warm") {
+    if (isHook) return 5;
+    if (isLast) return 8;
+    if (p < 0.25) return 5;
+    if (p < 0.5) return 4;
+    return 3;
+  }
+  // calm (película): más contemplativo
+  if (isHook) return 6;
+  if (isLast) return 10;
+  if (p < 0.3) return 6;
+  if (p < 0.6) return 5;
+  return 4;
+}
+
+// Cuántos beats dura cada clip según energía, posición y tipo. Los videos ocupan
+// más beats (para que se aprecie el movimiento), acotados por su propia duración.
+function beatsForClip(
+  energy: Energy,
+  clip: ReelClip,
+  spb: number,
+  index: number,
+  total: number,
+): number {
   const isVideo = clip.kind === "video";
-  const basePhoto = energy === "upbeat" ? 2 : energy === "warm" ? 3 : 4;
+  const basePhoto = basePhotoBeats(energy, index, total);
   if (!isVideo) return basePhoto;
 
   const videoSecs = clip.durationInFrames / FPS;
@@ -156,15 +192,17 @@ function beatsForClip(energy: Energy, clip: ReelClip, spb: number): number {
 }
 
 // Reescribe las duraciones de los clips para que caigan en la rejilla de beats
-// y marca los arranques de sección (cambio de momento respecto al clip previo).
-// En una sección los cortes caen secos al beat; en un arranque de sección la
-// transición será más larga/suave (lo decide Remotion con `sectionStart`).
+// (con el arco de ritmo por posición) y marca los arranques de sección (cambio
+// de momento respecto al clip previo). En una sección los cortes caen secos al
+// beat; en un arranque de sección la transición será un crossfade suave (lo
+// decide Remotion con `sectionStart`).
 export function beatAlignClips(clips: ReelClip[], track: Track): ReelClip[] {
   const spb = secondsPerBeat(track.bpm);
   const framesPerBeat = spb * FPS;
+  const total = clips.length;
   let prevLabel: string | null = null;
-  return clips.map((c) => {
-    const beats = beatsForClip(track.energy, c, spb);
+  return clips.map((c, i) => {
+    const beats = beatsForClip(track.energy, c, spb, i, total);
     const sectionStart = prevLabel !== null && c.label !== prevLabel;
     prevLabel = c.label;
     return {

@@ -52,7 +52,7 @@ const FORMAT_CFG: Record<
   ReelFormat,
   { photoSec: number; videoCapSec: number; maxClips: number }
 > = {
-  reel: { photoSec: 2.4, videoCapSec: 4, maxClips: 14 },
+  reel: { photoSec: 2.4, videoCapSec: 4, maxClips: 18 },
   trailer: { photoSec: 3.0, videoCapSec: 5, maxClips: 40 },
   film: { photoSec: 3.5, videoCapSec: 8, maxClips: 120 },
 };
@@ -100,7 +100,7 @@ export async function POST(
 
   const event = await prisma.event.findUnique({
     where: { id },
-    select: { id: true, name: true, hostName: true },
+    select: { id: true, name: true, hostName: true, date: true },
   });
   if (!event) {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });
@@ -146,6 +146,29 @@ export async function POST(
     return (b.qualityScore ?? 0) - (a.qualityScore ?? 0);
   });
   media = media.slice(0, cfg.maxClips);
+
+  // Gancho: la mejor toma va PRIMERO (no un plano de contexto). Priorizamos los
+  // momentos emotivos (beso/ceremonia/primer baile/brindis) y, dentro, la mayor
+  // calidad. El resto queda cronológico, así tras el gancho fluye prep→…→final y
+  // el último plano hace de cierre. Sólo para el reel corto (formatos largos
+  // mantienen la narrativa cronológica pura).
+  if (format === "reel" && media.length > 2) {
+    const HOOK_MOMENTS = new Set(["kiss", "ceremony", "firstdance", "toast"]);
+    let hookIdx = 0;
+    let hookScore = -Infinity;
+    media.forEach((m, i) => {
+      const emo = HOOK_MOMENTS.has(m.moment ?? "") ? 0.5 : 0;
+      const score = (m.qualityScore ?? 0) + emo;
+      if (score > hookScore) {
+        hookScore = score;
+        hookIdx = i;
+      }
+    });
+    if (hookIdx > 0) {
+      const [hook] = media.splice(hookIdx, 1);
+      media.unshift(hook);
+    }
+  }
 
   // ── Preparación por foto: normalización de exposición/WB (local, siempre) ──
   // Emparejar las exposiciones ANTES del LUT hace que el look de color case en
@@ -271,10 +294,21 @@ export async function POST(
   // look cinematográfico CSS de siempre.
   const lut = resolveLut();
 
+  // Fecha del evento formateada "DD · MM · YYYY" (o "" si no hay) para el título
+  // superpuesto y el outro.
+  const dateLabel = event.date
+    ? [
+        String(event.date.getDate()).padStart(2, "0"),
+        String(event.date.getMonth() + 1).padStart(2, "0"),
+        event.date.getFullYear(),
+      ].join(" · ")
+    : "";
+
   const inputProps: ReelProps = {
     format,
     title: event.name,
     subtitle: event.hostName ? `Organiza ${event.hostName}` : "",
+    dateLabel,
     clips: alignedClips,
     audioUrl: `${baseUrl()}${track.file}`,
     bpm: track.bpm,

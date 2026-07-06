@@ -32,7 +32,8 @@ export const RemotionRoot = () => {
       defaultProps={{
         format: "reel" as const,
         title: "Boda de Barak & Sofía",
-        subtitle: "29 · 06 · 2026",
+        subtitle: "Organiza OneMoment",
+        dateLabel: "29 · 06 · 2026",
         clips: [],
         audioUrl: null,
         bpm: null,

@@ -29,6 +29,8 @@ export const reelPropsSchema = z.object({
   title: z.string(),
   subtitle: z.string().default(""),
   clips: z.array(reelClipSchema),
+  // Fecha del evento ya formateada (p.ej. "29 · 06 · 2026"); "" si no hay.
+  dateLabel: z.string().default(""),
   audioUrl: z.string().nullable().default(null),
   // ── Sincronía musical ──
   // BPM del track y desfase del primer beat (seg). Con esto la edición "late"
@@ -73,21 +75,52 @@ export function formatSpec(format: ReelFormat): {
 }
 
 export type Segment =
-  | { kind: "title"; durationInFrames: number }
   | { kind: "clip"; durationInFrames: number; clip: ReelClip }
   | { kind: "outro"; durationInFrames: number };
 
+// El título ya NO es un segmento a pantalla completa: se superpone como
+// lower-third sobre el primer clip (el "gancho"), así 0–2s son imagen real y no
+// una tarjeta de marca. La línea de tiempo es: clips… + outro.
 export function buildSegments(props: ReelProps): Segment[] {
-  const segs: Segment[] = [{ kind: "title", durationInFrames: TITLE_FRAMES }];
+  const segs: Segment[] = [];
   for (const clip of props.clips)
     segs.push({ kind: "clip", durationInFrames: clip.durationInFrames, clip });
   segs.push({ kind: "outro", durationInFrames: OUTRO_FRAMES });
   return segs;
 }
 
-// Duración total considerando que cada transición solapa dos segmentos.
-export function totalDurationInFrames(props: ReelProps): number {
+// ¿Lleva transición suave (crossfade) el borde ANTES del segmento i? Sí para el
+// outro y para los cambios de sección (cambia el momento); el resto son cortes
+// secos al beat (gramática de cine, no pase de diapositivas). Devuelve los
+// frames de solape por borde (0 = corte seco).
+export function overlapBefore(segs: Segment[], i: number): number {
+  if (i <= 0) return 0;
+  const seg = segs[i];
+  const soft = seg.kind === "outro" || (seg.kind === "clip" && seg.clip.sectionStart);
+  return soft ? TRANSITION_FRAMES : 0;
+}
+
+// Línea de tiempo única (misma en Reel.tsx y en el cálculo de duración, para que
+// no se desincronicen): frame de inicio de cada segmento y duración total, con
+// los solapes de las transiciones descontados.
+export function buildTimeline(props: ReelProps): {
+  segs: Segment[];
+  overlaps: number[];
+  startFrames: number[];
+  total: number;
+} {
   const segs = buildSegments(props);
-  const sum = segs.reduce((a, s) => a + s.durationInFrames, 0);
-  return Math.max(1, sum - TRANSITION_FRAMES * (segs.length - 1));
+  const overlaps = segs.map((_, i) => overlapBefore(segs, i));
+  const startFrames: number[] = [];
+  let cursor = 0;
+  segs.forEach((seg, i) => {
+    cursor -= overlaps[i];
+    startFrames.push(Math.max(0, cursor));
+    cursor += seg.durationInFrames;
+  });
+  return { segs, overlaps, startFrames, total: Math.max(1, cursor) };
+}
+
+export function totalDurationInFrames(props: ReelProps): number {
+  return buildTimeline(props).total;
 }
