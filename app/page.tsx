@@ -307,7 +307,7 @@ export default function Home() {
                     Función
                   </th>
                   <th scope="col" className="eyebrow w-24 py-4 text-center font-normal md:w-40">
-                    Otras apps
+                    Apps de fotos por QR
                   </th>
                   <th scope="col" className="eyebrow w-24 py-4 text-center font-normal !text-accent md:w-40">
                     OneMoment
@@ -323,7 +323,9 @@ export default function Home() {
                   ["Descarta borrosas y duplicadas con IA", false, true],
                   ["Detecta los mejores momentos", false, true],
                   ["Reel, tráiler y película automáticos", false, true],
-                  ["Música y edición cinematográfica con IA", false, true],
+                  ["Montaje con arco: gancho, clímax y cierre", false, true],
+                  ["Cortes sincronizados a la música", false, true],
+                  ["Color cinematográfico (estilo boda 2026)", false, true],
                 ].map(([label, other, us], i) => (
                   <tr key={i} className="border-b border-hairline last:border-0">
                     <td className="py-4 pr-4 text-foreground/90">
