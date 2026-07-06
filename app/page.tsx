@@ -21,28 +21,36 @@ const EVENT_TYPES = [
 
 const FAQ = [
   {
-    q: "¿Cuánto cuesta?",
-    a: "Gratis durante la beta. Después será un pago único por evento (sin suscripción), en la línea de lo que cobra el mercado.",
-  },
-  {
     q: "¿Mis invitados tienen que instalar una app?",
-    a: "No. Escanean el QR y suben sus fotos y videos desde el navegador del teléfono, sin descargar nada.",
+    a: "No. Escanean el QR con la cámara del teléfono y suben sus fotos y videos desde el navegador. Nada que descargar, ninguna cuenta que crear.",
   },
   {
-    q: "¿Se pierde calidad al subir?",
-    a: "No. Guardamos los archivos en su calidad original, sin la compresión que aplica WhatsApp.",
+    q: "¿Se pierde calidad al subir las fotos y videos?",
+    a: "No. Guardamos cada archivo en su resolución original, sin la compresión que aplican WhatsApp o los grupos de mensajería. Lo que sube tu invitado es lo que queda.",
   },
   {
     q: "¿Qué hace exactamente la IA?",
-    a: "Descarta fotos borrosas y duplicadas, detecta los mejores momentos y arma automáticamente el reel, el tráiler y la película del evento, con música y edición al ritmo.",
+    a: "Descarta lo borroso y lo repetido, ordena los momentos del evento y monta solo el reel, el tráiler y la película con la música y los cortes al ritmo. Tú no editas nada: llegas a un video listo para compartir.",
   },
   {
-    q: "¿Para qué eventos sirve?",
-    a: "Bodas, cumpleaños, eventos corporativos, graduaciones y fiestas: cualquier momento donde varias personas capturan a la vez.",
+    q: "¿Quién puede ver las fotos del evento?",
+    a: "Solo quien tenga el enlace o el QR de tu evento. No hay perfiles públicos ni buscador: las fotos son del evento y de quien tú invites.",
+  },
+  {
+    q: "¿Puedo descargar las fotos y videos originales?",
+    a: "Sí. Además de la película, tienes la galería completa del evento para descargar los archivos originales cuando quieras.",
   },
   {
     q: "¿Cuánto tarda en estar lista la película?",
-    a: "Se genera cuando la pides. Un reel corto está en minutos; los formatos largos tardan un poco más.",
+    a: "Se genera cuando la pides. Un reel corto está en minutos; el tráiler y la película larga tardan algo más, según cuánto material haya.",
+  },
+  {
+    q: "¿Para qué eventos sirve?",
+    a: "Bodas, cumpleaños, eventos corporativos, graduaciones y fiestas: cualquier momento donde muchas personas graban a la vez desde ángulos distintos.",
+  },
+  {
+    q: "¿Cuánto cuesta?",
+    a: "Gratis durante la beta. Después será un pago único por evento —sin suscripción—, en la línea de lo que cobra el mercado.",
   },
 ];
 
