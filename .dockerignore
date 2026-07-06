@@ -9,3 +9,4 @@ prisma/dev.db-journal
 scripts/*.output
 npm-debug.log
 .DS_Store
+docs/SECURITY_AUDIT.md

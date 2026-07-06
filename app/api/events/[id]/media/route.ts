@@ -89,12 +89,13 @@ export async function POST(
   const skipped: string[] = [];
 
   for (const file of files) {
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
-    if (!isImage && !isVideo) {
+    // Sólo tipos conocidos (los del mapa). Rechaza SVG y cualquier MIME raro:
+    // un image/svg+xml servido en línea ejecutaría <script> (XSS almacenado).
+    if (!EXT_BY_MIME[file.type]) {
       skipped.push(file.name);
       continue;
     }
+    const isVideo = file.type.startsWith("video/");
     if (file.size > MAX_BYTES || file.size === 0) {
       skipped.push(file.name);
       continue;

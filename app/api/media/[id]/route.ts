@@ -4,6 +4,22 @@ import { readMedia } from "@/lib/storage";
 import { enhancedName } from "@/lib/ai/normalize";
 import { videoEnhancedName } from "@/lib/ai/video-enhance";
 
+// Tipos que es seguro servir EN LÍNEA (el navegador los pinta, no los ejecuta).
+// Cualquier otro (p. ej. un SVG antiguo, o un MIME manipulado) se sirve como
+// descarga opaca para que nunca corra script en nuestro origen.
+const SAFE_INLINE = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/gif",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-matroska",
+]);
+
 // Anulación manual del dueño: fijar (pinned) u ocultar (hidden) una pieza.
 // Mantenemos `selected`/`isBlurry`/`isDuplicate` coherentes al instante para
 // que la película refleje el cambio sin esperar al siguiente re-proceso.
@@ -92,9 +108,13 @@ export async function GET(
     } else {
       buf = await readMedia(item.eventId, item.filename);
     }
+    // Sólo servimos en línea los tipos seguros; el resto, como descarga opaca.
+    const safe = SAFE_INLINE.has(contentType);
     return new NextResponse(new Uint8Array(buf), {
       headers: {
-        "Content-Type": contentType,
+        "Content-Type": safe ? contentType : "application/octet-stream",
+        "Content-Disposition": safe ? "inline" : "attachment",
+        "X-Content-Type-Options": "nosniff",
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
