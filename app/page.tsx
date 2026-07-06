@@ -2,21 +2,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  SparklesIcon,
-  ArrowRightIcon,
-  QrIcon,
-  CameraIcon,
-  FilmIcon,
-} from "@/app/components/icons";
+import { ArrowRightIcon } from "@/app/components/icons";
+import Reveal from "@/app/components/Reveal";
+import DemoReel from "@/app/components/DemoReel";
 
 const EVENT_TYPES = [
-  { value: "wedding", label: "💍 Boda" },
-  { value: "birthday", label: "🎂 Cumpleaños" },
-  { value: "corporate", label: "🏢 Corporativo" },
-  { value: "graduation", label: "🎓 Graduación" },
-  { value: "party", label: "🎉 Fiesta" },
-  { value: "other", label: "✨ Otro" },
+  { value: "wedding", label: "Boda" },
+  { value: "birthday", label: "Cumpleaños" },
+  { value: "corporate", label: "Corporativo" },
+  { value: "graduation", label: "Graduación" },
+  { value: "party", label: "Fiesta" },
+  { value: "other", label: "Otro" },
 ];
 
 const FAQ = [
@@ -54,6 +50,16 @@ const FAQ = [
   },
 ];
 
+// Cabecera de sección estilo "cartela de escena": mono + hairline.
+function SceneHeader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-4">
+      <span className="eyebrow whitespace-nowrap">{label}</span>
+      <span aria-hidden className="h-px flex-1 bg-hairline" />
+    </div>
+  );
+}
+
 export default function Home() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -83,158 +89,227 @@ export default function Home() {
   }
 
   return (
-    <main id="top" className="flex-1">
-      <div className="mx-auto max-w-6xl px-6 py-16 md:py-24">
-        {/* Hero */}
-        <div className="text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-1 text-sm text-muted">
-            <SparklesIcon width={14} height={14} className="text-accent" />
-            OneMoment
-          </span>
-          <h1 className="font-display mt-6 text-5xl font-semibold leading-[1.05] md:text-7xl">
-            Tus invitados capturan.
-            <br />
-            <span className="gradient-text">La IA crea la película.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-muted">
-            Crea un evento, comparte un QR y deja que todos suban fotos y videos.
-            Al terminar, la IA arma automáticamente el reel, el tráiler y la
-            película — sin duplicados, sin borrosas, con los mejores momentos.
+    <main id="top" className="flex-1 overflow-x-clip">
+      {/* ═══ COLD OPEN ═══
+          Móvil: pila centrada. Escritorio: póster asimétrico — texto a la
+          izquierda, pantalla del tráiler a la derecha (cabe en un viewport). */}
+      <section className="relative mx-auto flex min-h-[100svh] max-w-5xl flex-col items-center justify-center px-6 pb-16 pt-14 text-center lg:flex-row lg:items-center lg:justify-between lg:gap-12 lg:pb-24 lg:text-left">
+        <div className="flex flex-col items-center lg:max-w-[34rem] lg:items-start">
+          <p className="eyebrow title-in" style={{ animationDelay: "100ms" }}>
+            Una película hecha por todos
           </p>
-          <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-2 text-xs text-muted">
-            <span className="rounded-full border border-border px-3 py-1">
-              Sin instalar apps
-            </span>
-            <span className="rounded-full border border-border px-3 py-1">
-              Calidad original · sin la compresión de WhatsApp
-            </span>
-            <span className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1 font-medium text-accent">
-              Gratis durante la beta
-            </span>
+
+          <h1
+            className="font-display title-in mt-6 text-[clamp(2.9rem,11.5vw,4.25rem)] font-light leading-[1.03] lg:text-[4.6rem]"
+            style={{ animationDelay: "280ms", textWrap: "balance" }}
+          >
+            Tus invitados capturan. La IA crea la{" "}
+            <em className="italic text-accent">película</em>.
+          </h1>
+
+          {/* La pantalla, entre título y texto solo en móvil. */}
+          <div
+            className="title-in mt-10 w-full lg:hidden"
+            style={{ animationDelay: "520ms" }}
+          >
+            <DemoReel className="mx-auto w-[min(68vw,260px)]" />
+          </div>
+
+          <p
+            className="title-in mt-10 max-w-md text-base leading-relaxed text-muted lg:mt-8 lg:text-[17px]"
+            style={{ animationDelay: "700ms" }}
+          >
+            Comparte un QR, deja que todos suban fotos y videos, y recibe el
+            reel, el tráiler y la película del evento — montados por la IA.
+          </p>
+
+          <div className="title-in mt-8" style={{ animationDelay: "850ms" }}>
+            <a
+              href="#crear"
+              className="btn-primary inline-flex items-center gap-2 px-8 py-3.5 text-[15px]"
+            >
+              Crear mi evento
+              <ArrowRightIcon width={17} height={17} />
+            </a>
+            {/* Cada claim es una unidad: nunca se parte a media frase. */}
+            <p className="eyebrow mt-6 flex flex-wrap justify-center gap-x-3 gap-y-2 !tracking-[0.16em] lg:justify-start">
+              <span className="whitespace-nowrap">Sin apps</span>
+              <span aria-hidden>·</span>
+              <span className="whitespace-nowrap">Calidad original</span>
+              <span aria-hidden>·</span>
+              <span className="whitespace-nowrap">Gratis en beta</span>
+            </p>
           </div>
         </div>
 
-        {/* Formulario de creación */}
-        <div className="mx-auto mt-12 max-w-lg card p-6 md:p-8">
-          <h2 className="text-xl font-semibold">Crea tu evento</h2>
-          <p className="mt-1 text-sm text-muted">
-            Toma 20 segundos. No necesitas que nadie instale ninguna app.
-          </p>
-
-          <form onSubmit={createEvent} className="mt-6 space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">
-                Nombre del evento
-              </label>
-              <input
-                className="w-full px-3 py-2.5"
-                placeholder="Boda de Barak & Sofía"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={120}
-                autoFocus
-              />
-            </div>
-
-            <div>
-              <label htmlFor="event-type" className="mb-1.5 block text-sm font-medium">
-                Tipo de evento
-              </label>
-              <select
-                id="event-type"
-                className="w-full px-3 py-2.5"
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-              >
-                {EVENT_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">
-                Organiza <span className="text-muted">(opcional)</span>
-              </label>
-              <input
-                className="w-full px-3 py-2.5"
-                placeholder="Tu nombre"
-                value={hostName}
-                onChange={(e) => setHostName(e.target.value)}
-                maxLength={80}
-              />
-            </div>
-
-            {error && <p className="text-sm text-red-400">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={loading || !name.trim()}
-              className="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 py-3 disabled:cursor-not-allowed"
-            >
-              {loading ? "Creando…" : "Crear evento y generar QR"}
-              {!loading && <ArrowRightIcon width={18} height={18} />}
-            </button>
-          </form>
+        {/* Pantalla del tráiler, columna derecha solo en escritorio. */}
+        <div
+          className="title-in hidden shrink-0 lg:block"
+          style={{ animationDelay: "520ms" }}
+        >
+          <DemoReel className="w-[320px]" />
         </div>
 
-        {/* Cómo funciona */}
-        <div className="mx-auto mt-20 grid max-w-4xl gap-6 md:grid-cols-3">
-          {[
-            {
-              n: "1",
-              Icon: QrIcon,
-              t: "Comparte el QR",
-              d: "Los invitados escanean y se unen desde el navegador. Cero instalaciones.",
-            },
-            {
-              n: "2",
-              Icon: CameraIcon,
-              t: "Todos suben",
-              d: "Fotos, videos y selfies durante toda la noche, en un solo lugar.",
-            },
-            {
-              n: "3",
-              Icon: FilmIcon,
-              t: "La IA edita",
-              d: "Descarta borrosas y duplicadas, detecta los momentos y arma la película.",
-            },
-          ].map((s) => (
-            <div key={s.n} className="card p-6 transition-colors hover:border-accent/50">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-border text-accent">
-                  <s.Icon width={20} height={20} />
-                </span>
-                <span className="text-2xl font-bold gradient-text">{s.n}</span>
+        {/* Invitación a deslizar: solo escritorio (en móvil chocaría con el
+            contenido cuando el hero supera el alto de pantalla). */}
+        <div
+          aria-hidden
+          className="title-in absolute bottom-6 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-3 lg:flex"
+          style={{ animationDelay: "1100ms" }}
+        >
+          <span className="eyebrow text-[9px]">Desliza</span>
+          <span className="scroll-cue block h-10 w-px bg-foreground/30" />
+        </div>
+      </section>
+
+      <div className="mx-auto max-w-5xl px-6">
+        {/* ═══ EMPIEZA AQUÍ · formulario ═══ */}
+        <section id="crear" className="scroll-mt-10 py-24 md:py-36">
+          <Reveal>
+            <SceneHeader label="Empieza aquí" />
+            <div className="mt-6 md:grid md:grid-cols-12 md:gap-10">
+              <div className="md:col-span-5">
+                <h2 className="font-display text-4xl font-light md:text-5xl">
+                  Crea tu evento
+                </h2>
+                <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted">
+                  Toma 20 segundos. Nadie instala nada: tus invitados solo
+                  escanean el QR.
+                </p>
               </div>
-              <h3 className="mt-3 font-semibold">{s.t}</h3>
-              <p className="mt-1 text-sm text-muted">{s.d}</p>
-            </div>
-          ))}
-        </div>
 
-        {/* Comparación vs competencia */}
-        <div className="mx-auto mt-24 max-w-4xl">
-          <h2 className="font-display text-center text-3xl font-semibold md:text-4xl">
-            Los demás te dan una carpeta.
-            <br />
-            <span className="gradient-text">OneMoment te entrega la película.</span>
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-center text-muted">
-            Las apps de fotos por QR juntan los archivos y ahí se quedan. OneMoment
-            los convierte en un video editado, listo para compartir.
-          </p>
-          <div className="mt-10 overflow-hidden rounded-2xl border border-border">
+              {/* El único "objeto" interactivo de la página: panel sutil. */}
+              <form
+                onSubmit={createEvent}
+                className="mt-10 max-w-md space-y-7 rounded-md border border-hairline bg-card/50 p-6 md:col-span-7 md:mt-0 md:max-w-lg md:p-8"
+              >
+              <div>
+                <label htmlFor="event-name" className="eyebrow mb-2.5 block">
+                  Nombre del evento
+                </label>
+                <input
+                  id="event-name"
+                  className="w-full px-3.5 py-3"
+                  placeholder="Boda de Barak & Sofía"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={120}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="event-type" className="eyebrow mb-2.5 block">
+                  Tipo de evento
+                </label>
+                <select
+                  id="event-type"
+                  className="w-full cursor-pointer px-3.5 py-3"
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                >
+                  {EVENT_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="host-name" className="eyebrow mb-2.5 block">
+                  Organiza <span className="normal-case">(opcional)</span>
+                </label>
+                <input
+                  id="host-name"
+                  className="w-full px-3.5 py-3"
+                  placeholder="Tu nombre"
+                  value={hostName}
+                  onChange={(e) => setHostName(e.target.value)}
+                  maxLength={80}
+                />
+              </div>
+
+              {error && (
+                <p role="alert" className="text-sm text-red-400">
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading || !name.trim()}
+                className="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 py-3.5 disabled:cursor-not-allowed"
+              >
+                {loading ? "Creando…" : "Crear evento y generar QR"}
+                {!loading && <ArrowRightIcon width={17} height={17} />}
+              </button>
+              </form>
+            </div>
+          </Reveal>
+        </section>
+
+        {/* ═══ ESCENAS 01–03 · cómo funciona ═══ */}
+        <section className="py-24 md:py-36">
+          <div className="space-y-20 md:space-y-28">
+            {[
+              {
+                n: "Escena 01",
+                t: "Comparte el QR",
+                d: "Imprime el cartel o pásalo por el grupo. Los invitados escanean y entran desde el navegador — cero instalaciones, cero cuentas.",
+              },
+              {
+                n: "Escena 02",
+                t: "Todos graban",
+                d: "Fotos, videos y selfies durante toda la noche, desde todos los ángulos, en calidad original. Todo llega a un mismo lugar.",
+              },
+              {
+                n: "Escena 03",
+                t: "La IA edita",
+                d: "Descarta lo borroso y lo repetido, encuentra los mejores momentos y monta el reel, el tráiler y la película, con música y cortes al ritmo.",
+              },
+            ].map((s, i) => (
+              <Reveal key={s.n} delay={i * 60}>
+                <SceneHeader label={s.n} />
+                <div className="mt-6 md:grid md:grid-cols-12 md:gap-8">
+                  <h3 className="font-display text-4xl font-light leading-tight md:col-span-6 md:text-5xl">
+                    {s.t}
+                  </h3>
+                  <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted md:col-span-6 md:mt-2">
+                    {s.d}
+                  </p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* ═══ LA DIFERENCIA · comparación ═══ */}
+        <section className="py-24 md:py-36">
+          <Reveal>
+            <SceneHeader label="La diferencia" />
+            <h2 className="font-display mt-6 max-w-3xl text-4xl font-light leading-[1.1] md:text-6xl">
+              Los demás te dan una carpeta.
+              <br />
+              Nosotros, <em className="italic text-accent">la película</em>.
+            </h2>
+            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">
+              Las apps de fotos por QR juntan los archivos y ahí se quedan.
+              OneMoment los convierte en un video editado, listo para
+              compartir.
+            </p>
+          </Reveal>
+
+          <Reveal className="mt-14" delay={80}>
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-border bg-card">
-                  <th className="px-4 py-3 font-medium text-muted">Función</th>
-                  <th className="px-4 py-3 text-center font-medium text-muted">
-                    Otras apps de fotos
+                <tr className="border-b border-hairline">
+                  <th scope="col" className="eyebrow py-4 pr-4 font-normal">
+                    Función
                   </th>
-                  <th className="px-4 py-3 text-center font-semibold text-accent">
+                  <th scope="col" className="eyebrow w-24 py-4 text-center font-normal md:w-40">
+                    Otras apps
+                  </th>
+                  <th scope="col" className="eyebrow w-24 py-4 text-center font-normal !text-accent md:w-40">
                     OneMoment
                   </th>
                 </tr>
@@ -250,37 +325,36 @@ export default function Home() {
                   ["Reel, tráiler y película automáticos", false, true],
                   ["Música y edición cinematográfica con IA", false, true],
                 ].map(([label, other, us], i) => (
-                  <tr key={i} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3">{label as string}</td>
-                    <td className="px-4 py-3 text-center">
+                  <tr key={i} className="border-b border-hairline last:border-0">
+                    <td className="py-4 pr-4 text-foreground/90">
+                      {label as string}
+                    </td>
+                    <td className="py-4 text-center">
                       <Mark on={other as boolean} />
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="py-4 text-center">
                       <Mark on={us as boolean} accent />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
+          </Reveal>
+        </section>
 
-        {/* Ejemplos ilustrativos (NO testimonios reales — se marcan como ejemplos
-            para no arriesgar la confianza de la marca hasta tener casos reales). */}
-        <div className="mx-auto mt-24 max-w-4xl">
-          <div className="text-center">
-            <span className="inline-block rounded-full border border-border px-3 py-1 text-xs uppercase tracking-wide text-muted">
-              Ejemplos
-            </span>
-            <h2 className="font-display mt-4 text-3xl font-semibold md:text-4xl">
+        {/* ═══ HISTORIAS · ejemplos ilustrativos (NO testimonios reales) ═══ */}
+        <section className="py-24 md:py-36">
+          <Reveal>
+            <SceneHeader label="Historias" />
+            <h2 className="font-display mt-6 text-4xl font-light md:text-5xl">
               Cómo se vive un evento con OneMoment
             </h2>
-            <p className="mt-2 text-sm text-muted">
+            <p className="mt-3 text-sm text-muted">
               Escenarios de ejemplo de lo que hace la app. (Aún no publicamos
               testimonios; los añadiremos con eventos reales.)
             </p>
-          </div>
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
+          </Reveal>
+          <div className="mt-14 space-y-12">
             {[
               {
                 q: "180 invitados suben 2.400 fotos durante la boda. Al día siguiente hay un reel listo para Instagram.",
@@ -295,40 +369,45 @@ export default function Home() {
                 r: "Cero fricción · solo QR",
               },
             ].map((t, i) => (
-              <figure key={i} className="card flex flex-col p-6">
-                <blockquote className="flex-1 text-sm leading-relaxed text-foreground/90">
-                  {t.q}
+              <Reveal key={i} as="figure" delay={i * 60} className="border-l border-hairline pl-6 md:pl-10">
+                <blockquote className="font-display max-w-2xl text-2xl font-light italic leading-snug text-foreground/90 md:text-3xl">
+                  «{t.q}»
                 </blockquote>
-                <figcaption className="mt-4 text-xs font-medium text-accent">
-                  {t.r}
-                </figcaption>
-              </figure>
+                <figcaption className="eyebrow mt-4">{t.r}</figcaption>
+              </Reveal>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* FAQ (contenido + schema para SEO) */}
-        <div className="mx-auto mt-24 max-w-3xl">
-          <h2 className="font-display text-center text-3xl font-semibold md:text-4xl">
-            Preguntas frecuentes
-          </h2>
-          <div className="mt-10 space-y-3">
-            {FAQ.map((f) => (
-              <details
-                key={f.q}
-                className="card group p-5 [&_summary]:cursor-pointer"
-              >
-                <summary className="flex items-center justify-between font-medium">
-                  {f.q}
-                  <span className="text-muted transition-transform group-open:rotate-45">
-                    +
-                  </span>
-                </summary>
-                <p className="mt-3 text-sm text-muted">{f.a}</p>
-              </details>
-            ))}
-          </div>
-        </div>
+        {/* ═══ PREGUNTAS · FAQ (contenido + schema para SEO) ═══ */}
+        <section className="max-w-3xl py-24 md:py-36">
+          <Reveal>
+            <SceneHeader label="Preguntas" />
+            <h2 className="font-display mt-6 text-4xl font-light md:text-5xl">
+              Preguntas frecuentes
+            </h2>
+          </Reveal>
+          <Reveal className="mt-12" delay={80}>
+            <div className="border-t border-hairline">
+              {FAQ.map((f) => (
+                <details key={f.q} className="group border-b border-hairline">
+                  <summary className="flex cursor-pointer items-baseline justify-between gap-6 py-5 font-display text-xl font-normal leading-snug md:text-2xl">
+                    {f.q}
+                    <span
+                      aria-hidden
+                      className="text-lg font-light text-muted transition-transform duration-300 group-open:rotate-45"
+                    >
+                      +
+                    </span>
+                  </summary>
+                  <p className="max-w-2xl pb-6 text-[15px] leading-relaxed text-muted">
+                    {f.a}
+                  </p>
+                </details>
+              ))}
+            </div>
+          </Reveal>
+        </section>
 
         <script
           type="application/ld+json"
@@ -345,26 +424,47 @@ export default function Home() {
           }}
         />
 
-        {/* CTA final */}
-        <div className="mx-auto mt-24 max-w-2xl text-center">
-          <h2 className="font-display text-3xl font-semibold md:text-4xl">
-            ¿Tienes un evento pronto?
-          </h2>
-          <p className="mt-3 text-muted">
-            Crea el evento ahora y ten el QR listo para imprimir en un minuto.
+        {/* ═══ CRÉDITOS FINALES · CTA ═══ */}
+        <section className="py-28 pb-24 text-center md:py-44">
+          <Reveal>
+            <div className="billing space-y-4">
+              <p>
+                <span className="role block">Dirigida por</span>
+                <span className="name block">Tus invitados</span>
+              </p>
+              <p>
+                <span className="role block">Editada por</span>
+                <span className="name block">OneMoment AI</span>
+              </p>
+              <p>
+                <span className="role block">Protagonizada por</span>
+                <span className="name block">Todos los que estuvieron</span>
+              </p>
+            </div>
+
+            <h2 className="font-display mt-12 text-5xl font-light md:text-6xl">
+              <em className="italic">Tu evento</em>
+              <span className="ml-3 text-2xl font-light text-muted md:text-3xl">
+                (2026)
+              </span>
+            </h2>
+            <p className="mt-4 text-[15px] text-muted">
+              Crea el evento ahora y ten el QR listo para imprimir en un
+              minuto.
+            </p>
+            <a
+              href="#crear"
+              className="btn-primary mt-10 inline-flex cursor-pointer items-center gap-2 px-8 py-3.5 text-[15px]"
+            >
+              Crear mi evento
+              <ArrowRightIcon width={17} height={17} />
+            </a>
+          </Reveal>
+
+          <p className="eyebrow mt-24 text-[9px]">
+            © 2026 OneMoment · Una película hecha por todos
           </p>
-          <a
-            href="#top"
-            onClick={(e) => {
-              e.preventDefault();
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className="btn-primary mt-6 inline-flex cursor-pointer items-center gap-2 px-6 py-3"
-          >
-            Crear mi evento
-            <ArrowRightIcon width={18} height={18} />
-          </a>
-        </div>
+        </section>
       </div>
     </main>
   );
@@ -382,7 +482,7 @@ function Mark({ on, accent }: { on: boolean; accent?: boolean }) {
   return (
     <span
       aria-label="Incluido"
-      className={accent ? "font-semibold text-accent" : "text-foreground/70"}
+      className={accent ? "font-medium text-accent" : "text-foreground/60"}
     >
       ✓
     </span>

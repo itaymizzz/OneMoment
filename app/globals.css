@@ -1,13 +1,20 @@
 @import "tailwindcss";
 
+/* ──────────────────────────────────────────────────────────────────────────
+   OneMoment · "La Première" — sala de cine cálida.
+   Ver DESIGN_DIRECTION.md. Un solo acento (oro antiguo); nada de gradientes
+   en texto; hairlines como estructura; movimiento lento y una sola vez.
+   ────────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #0b0b0f;
-  --foreground: #f5f5f7;
-  --muted: #9a9aa6;
-  --card: #15151c;
-  --border: #26262f;
-  --accent: #e8b04b; /* dorado cálido, tono "evento" */
-  --accent-2: #d65db1; /* magenta fiesta */
+  --background: #0b0a08; /* negro cálido de sala, no #000 */
+  --foreground: #f2ede3; /* marfil cálido */
+  --muted: #9c948a;
+  --card: #14120e; /* superficie apenas más clara */
+  --border: #262219;
+  --accent: #c6a15b; /* oro antiguo, mate */
+  --accent-2: #8a6d38; /* oro profundo (presionado/bordes) */
+  --hairline: rgba(242, 237, 227, 0.14);
 }
 
 @theme inline {
@@ -18,6 +25,7 @@
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-accent-2: var(--accent-2);
+  --color-hairline: var(--hairline);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-display);
@@ -34,17 +42,26 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Titulares "de invitación": serif elegante. */
+/* Titulares de cine: serif ligera a gran tamaño. */
 .font-display {
   font-family: var(--font-display), Georgia, "Times New Roman", serif;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
+}
+
+/* Metadatos de película (A24): mono pequeña, mayúsculas, tracking ancho. */
+.eyebrow {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.6875rem; /* 11px */
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--muted);
 }
 
 /* Foco visible y consistente para navegación por teclado (a11y). */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 0.4rem;
+  border-radius: 0.25rem;
 }
 
 /* Respeta a quien prefiere menos movimiento. */
@@ -57,6 +74,155 @@ body {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ── Grano de película: la textura que separa "cine" de "dark mode" ── */
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: -100%;
+  z-index: 40;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.045;
+  animation: grain 9s steps(10) infinite;
+}
+@keyframes grain {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-3%, -6%); }
+  20% { transform: translate(4%, 2%); }
+  30% { transform: translate(-2%, 5%); }
+  40% { transform: translate(6%, -3%); }
+  50% { transform: translate(-5%, 4%); }
+  60% { transform: translate(2%, 6%); }
+  70% { transform: translate(5%, -5%); }
+  80% { transform: translate(-6%, -2%); }
+  90% { transform: translate(3%, 4%); }
+}
+
+/* ── Revelado al hacer scroll: una sola vez, lento, elegante ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.85s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.85s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Secuencia de títulos del hero (al cargar, escalonada). */
+@keyframes titleIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+.title-in {
+  animation: titleIn 0.9s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+/* Línea vertical del "desliza" del hero. */
+@keyframes scrollCue {
+  0% { transform: scaleY(0); transform-origin: top; }
+  45% { transform: scaleY(1); transform-origin: top; }
+  55% { transform: scaleY(1); transform-origin: bottom; }
+  100% { transform: scaleY(0); transform-origin: bottom; }
+}
+.scroll-cue {
+  animation: scrollCue 2.6s ease-in-out infinite;
+}
+
+/* ── Fondo: vignette cálida, muy sutil (sustituye a los halos de colores) ── */
+.stage-bg {
+  background:
+    radial-gradient(120rem 60rem at 50% -20%, rgba(198, 161, 91, 0.06), transparent 60%),
+    var(--background);
+}
+
+/* Antes gradiente oro→magenta; ahora acento sólido (coherencia en toda la app). */
+.gradient-text {
+  color: var(--accent);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #16120a;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border-radius: 0.25rem;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.btn-primary:hover {
+  background: #d4b06e;
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 0.25rem;
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  background: rgba(198, 161, 91, 0.04);
+}
+select option {
+  background: var(--card);
+  color: var(--foreground);
+}
+::placeholder {
+  color: rgba(156, 148, 138, 0.55);
+}
+
+/* ── Marco del tráiler (9:16): pantalla en la sala oscura ── */
+.reel-frame {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  border: 1px solid var(--hairline);
+  border-radius: 0.375rem;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 60% at 50% 30%, rgba(198, 161, 91, 0.08), transparent 70%),
+    #0e0d0a;
+  box-shadow:
+    0 0 80px rgba(198, 161, 91, 0.1),
+    0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+/* Créditos finales: bloque de billing de póster de cine. */
+.billing {
+  font-family: var(--font-geist-mono), monospace;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.9;
+}
+.billing .role {
+  font-size: 0.5625rem; /* 9px */
+  letter-spacing: 0.28em;
+  color: var(--muted);
+}
+.billing .name {
+  font-size: 0.8125rem; /* 13px */
+  letter-spacing: 0.18em;
+  color: var(--foreground);
 }
 
 /* ── Muro en vivo (slideshow para TV/proyector) ── */
@@ -81,58 +247,6 @@ body {
 }
 .wall-new-badge {
   animation: wallPop 0.5s ease both;
-}
-
-/* Fondo con un sutil halo de luz tipo escenario */
-.stage-bg {
-  background:
-    radial-gradient(60rem 40rem at 50% -10%, rgba(232, 176, 75, 0.12), transparent 60%),
-    radial-gradient(50rem 30rem at 90% 10%, rgba(214, 93, 177, 0.1), transparent 55%),
-    var(--background);
-}
-
-.gradient-text {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-}
-
-.btn-primary {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  color: #1a1208;
-  font-weight: 600;
-  border-radius: 0.75rem;
-  transition: transform 0.15s ease, filter 0.15s ease;
-}
-.btn-primary:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-}
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-input,
-select,
-textarea {
-  background: #0e0e14;
-  border: 1px solid var(--border);
-  border-radius: 0.6rem;
-  color: var(--foreground);
-  outline: none;
-}
-input:focus,
-select:focus,
-textarea:focus {
-  border-color: var(--accent);
 }
 
 /* ── Cartel para imprimir ──────────────────────────────────────────────────

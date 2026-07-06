@@ -12,10 +12,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Serif elegante "de invitación" para titulares (recomendación de diseño).
+// Serif de cine: pesos ligeros a gran tamaño + itálica para la palabra
+// emocional del titular (ver DESIGN_DIRECTION.md).
 const cormorant = Cormorant_Garamond({
   variable: "--font-display",
-  weight: ["500", "600", "700"],
+  weight: ["300", "400", "500"],
+  style: ["normal", "italic"],
   subsets: ["latin"],
 });
 
@@ -79,7 +81,7 @@ const orgJsonLd = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0b0f",
+  themeColor: "#0b0a08",
   width: "device-width",
   initialScale: 1,
 };
@@ -94,11 +96,15 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col stage-bg">
+      <body className="min-h-full flex flex-col stage-bg grain">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
         />
+        {/* Sin JS los .reveal quedarían invisibles; esto los muestra. */}
+        <noscript>
+          <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
+        </noscript>
         {children}
       </body>
     </html>
