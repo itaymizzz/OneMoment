@@ -75,7 +75,7 @@ export default function Home() {
   }
 
   return (
-    <main className="flex-1">
+    <main id="top" className="flex-1">
       <div className="mx-auto max-w-6xl px-6 py-16 md:py-24">
         {/* Hero */}
         <div className="text-center">
@@ -129,10 +129,11 @@ export default function Home() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium">
+              <label htmlFor="event-type" className="mb-1.5 block text-sm font-medium">
                 Tipo de evento
               </label>
               <select
+                id="event-type"
                 className="w-full px-3 py-2.5"
                 value={type}
                 onChange={(e) => setType(e.target.value)}
