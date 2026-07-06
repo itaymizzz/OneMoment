@@ -36,6 +36,10 @@ export default function PhotoWall({
   const seen = useRef<Set<string>>(new Set(initial.map((m) => m.id)));
   const newQueue = useRef<Media[]>([]);
   const idxRef = useRef(0);
+  // El slideshow lee la lista desde un ref: así su intervalo de avance no se
+  // reinicia con cada sondeo (si se reiniciara, con POLL_MS < ADVANCE_MS la
+  // foto no cambiaría nunca).
+  const mediaRef = useRef<Media[]>(initial);
 
   // Sondeo en vivo de fotos nuevas (pausa si la pestaña está en segundo plano).
   useEffect(() => {
@@ -45,6 +49,7 @@ export default function PhotoWall({
         const res = await fetch(`/api/events/${eventId}/media`, { cache: "no-store" });
         if (!res.ok) return;
         const data = (await res.json()) as { media: Media[] };
+        mediaRef.current = data.media;
         setMedia(data.media);
         for (const m of data.media) {
           if (!seen.current.has(m.id)) {
@@ -68,7 +73,7 @@ export default function PhotoWall({
       setIsNew(true);
       return;
     }
-    const pool = displayable(media);
+    const pool = displayable(mediaRef.current);
     if (pool.length === 0) {
       setCurrent(null);
       return;
@@ -76,7 +81,7 @@ export default function PhotoWall({
     idxRef.current = (idxRef.current + 1) % pool.length;
     setCurrent(pool[idxRef.current]);
     setIsNew(false);
-  }, [media]);
+  }, []);
 
   useEffect(() => {
     const t = setInterval(advance, ADVANCE_MS);
