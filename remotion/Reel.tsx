@@ -33,18 +33,49 @@ const BG = "#0b0b0f";
 
 // ── Sincronía al beat ───────────────────────────────────────────────────────
 // Devuelve un factor de escala que "late" en cada beat (más fuerte en el
-// downbeat de cada compás de 4) y una intensidad de destello para el downbeat.
-// Con BPM constante la fase es exacta; para pistas de tempo variable habría que
-// pasar un array de beats.
+// downbeat) y una intensidad de destello para el downbeat.
+//   • Si hay beats REALES (medidos del audio), busca el beat inmediatamente
+//     anterior a `tGlobal` y saca la fase de su intervalo real → soporta tempo
+//     variable y destella justo en los downbeats detectados.
+//   • Si no, cae a la rejilla de BPM constante (comportamiento previo).
+// `tGlobal` es el tiempo en segundos DESDE EL INICIO del reel (no del clip), que
+// es lo que corresponde al audio continuo.
 function beatPulse(
-  frame: number,
-  fps: number,
+  tGlobal: number,
   bpm: number | null,
   offsetSec: number,
+  beats: number[],
+  downbeats: number[],
 ): { scale: number; flash: number } {
+  // Camino de beats reales.
+  if (beats.length > 1 && tGlobal >= beats[0]) {
+    // Búsqueda binaria del beat anterior a tGlobal.
+    let lo = 0;
+    let hi = beats.length - 1;
+    let idx = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] <= tGlobal) {
+        idx = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    const beatT = beats[idx];
+    const nextT = beats[idx + 1] ?? beatT + (bpm ? 60 / bpm : 0.5);
+    const interval = Math.max(0.05, nextT - beatT);
+    const phase = Math.min(1, (tGlobal - beatT) / interval);
+    const isDown = downbeats.includes(beatT);
+    const pulse = Math.exp(-phase * 6);
+    const amp = isDown ? 0.045 : 0.02;
+    return { scale: 1 + amp * pulse, flash: isDown ? 0.08 * pulse : 0 };
+  }
+
+  // Fallback: rejilla de BPM constante.
   if (!bpm) return { scale: 1, flash: 0 };
   const spb = 60 / bpm;
-  const t = frame / fps - offsetSec;
+  const t = tGlobal - offsetSec;
   if (t < 0) return { scale: 1, flash: 0 };
   const beatPos = t / spb;
   const phase = beatPos - Math.floor(beatPos); // 0..1 dentro del beat
@@ -186,9 +217,19 @@ function transitionFor(
   i: number,
   width: number,
   height: number,
+  soft: boolean,
 ): { presentation: AnyPresentation; durationInFrames: number } {
+  // Arranque de sección (cambió el momento): crossfade suave — "respira" y deja
+  // claro que empieza otra parte del evento.
+  if (soft) {
+    return {
+      presentation: fade() as unknown as AnyPresentation,
+      durationInFrames: TRANSITION_FRAMES,
+    };
+  }
+  // Dentro de una sección: movimientos rápidos (sin el fade plano) que cortan
+  // al ritmo — la peli se siente montada a la música, no un pase de diapositivas.
   const list = [
-    () => fade(),
     () => slide({ direction: "from-right" }),
     () => wipe({ direction: "from-left" }),
     () => slide({ direction: "from-bottom" }),
@@ -209,12 +250,18 @@ function ClipFrame({
   look,
   bpm,
   beatOffsetSec,
+  beats,
+  downbeats,
+  startFrame,
 }: {
   segment: Extract<Segment, { kind: "clip" }>;
   motion: Motion;
   look: Look;
   bpm: number | null;
   beatOffsetSec: number;
+  beats: number[];
+  downbeats: number[];
+  startFrame: number; // frame de inicio del clip DENTRO del reel (audio continuo)
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -229,8 +276,15 @@ function ClipFrame({
     extrapolateRight: "clamp",
   });
 
-  // Latido al beat: la imagen "respira" con la música.
-  const beat = beatPulse(frame, fps, bpm, beatOffsetSec);
+  // Latido al beat: la imagen "respira" con la música. Usamos el tiempo global
+  // (inicio del clip + frame local) para alinear con el audio continuo.
+  const beat = beatPulse(
+    (startFrame + frame) / fps,
+    bpm,
+    beatOffsetSec,
+    beats,
+    downbeats,
+  );
 
   return (
     <AbsoluteFill style={{ backgroundColor: BG }}>
@@ -412,19 +466,33 @@ export function Reel(props: ReelProps) {
   const { width, height } = useVideoConfig();
   const segments = buildSegments(props);
 
+  // Frame de inicio de cada segmento en la línea de tiempo de salida. Como cada
+  // transición (de duración uniforme) solapa el segmento anterior y el siguiente,
+  // el segmento k arranca en (Σ duraciones[0..k-1]) − k·TRANSITION_FRAMES. Esto
+  // nos da el tiempo global de cada clip para alinear el latido con el audio.
+  const startFrames: number[] = [];
+  let sumDur = 0;
+  segments.forEach((seg, i) => {
+    startFrames.push(Math.max(0, sumDur - i * TRANSITION_FRAMES));
+    sumDur += seg.durationInFrames;
+  });
+
   const children: React.ReactNode[] = [];
   let clipIndex = 0;
   segments.forEach((seg, i) => {
     if (i > 0) {
-      const t = transitionFor(i, width, height);
+      const soft = seg.kind === "clip" && seg.clip.sectionStart;
+      const t = transitionFor(i, width, height, soft);
       children.push(
         <TransitionSeries.Transition
           key={`t-${i}`}
           presentation={t.presentation}
           timing={
-            i % 3 === 0
-              ? springTiming({ config: { damping: 200 }, durationInFrames: t.durationInFrames })
-              : linearTiming({ durationInFrames: t.durationInFrames })
+            soft
+              ? linearTiming({ durationInFrames: t.durationInFrames })
+              : i % 3 === 0
+                ? springTiming({ config: { damping: 200 }, durationInFrames: t.durationInFrames })
+                : linearTiming({ durationInFrames: t.durationInFrames })
           }
         />,
       );
@@ -442,6 +510,9 @@ export function Reel(props: ReelProps) {
           look={props.look}
           bpm={props.bpm}
           beatOffsetSec={props.beatOffsetSec}
+          beats={props.beats}
+          downbeats={props.downbeats}
+          startFrame={startFrames[i]}
         />
       );
       clipIndex++;

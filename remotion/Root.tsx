@@ -37,6 +37,8 @@ export const RemotionRoot = () => {
         audioUrl: null,
         bpm: null,
         beatOffsetSec: 0,
+        beats: [],
+        downbeats: [],
         look: "cinematic" as const,
       }}
       calculateMetadata={calculateMetadata}

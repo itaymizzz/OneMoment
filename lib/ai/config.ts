@@ -25,11 +25,13 @@ export const ai = {
           region: env("AWS_REGION") ?? "us-east-1",
         }
       : null,
-  // 3) Mejora de imagen/video
-  fal: env("FAL_KEY"),
-  magnific: env("MAGNIFIC_API_KEY"),
-  // 4) Detección de beats en pistas arbitrarias
+  // 3) Detección de beats en pistas arbitrarias (respaldo en la nube; el
+  //    análisis principal es local: lib/ai/beat-detect.ts)
   musicai: env("MUSICAI_API_KEY"),
+  // NOTA: la mejora generativa de fotos (fal.ai clarity-upscaler / GFPGAN) se
+  // RETIRÓ a propósito: regeneraba las caras y la gente salía con pinta "de
+  // IA". La única preparación de foto es la normalización local de exposición/
+  // balance de blancos (lib/ai/normalize.ts), que no toca rasgos.
 } as const;
 
 // Resumen legible de qué capas están activas (para logs / panel de estado).
@@ -41,8 +43,8 @@ export function activeLayers() {
         ? "claude + rekognition"
         : "claude"
       : "sharp (local)",
-    enhancement: ai.fal ? (ai.magnific ? "fal + magnific" : "fal") : "ninguna",
-    beats: ai.musicai ? "music.ai" : "BPM fijo (local)",
+    enhancement: "normalización local (sin IA generativa en caras)",
+    beats: ai.musicai ? "local + music.ai (respaldo)" : "local (beat-detect)",
     color: "ffmpeg lut3d (local)",
   };
 }

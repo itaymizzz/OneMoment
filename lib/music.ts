@@ -155,12 +155,22 @@ function beatsForClip(energy: Energy, clip: ReelClip, spb: number): number {
   return Math.max(minV, Math.min(maxV, wanted || minV));
 }
 
-// Reescribe las duraciones de los clips para que caigan en la rejilla de beats.
+// Reescribe las duraciones de los clips para que caigan en la rejilla de beats
+// y marca los arranques de sección (cambio de momento respecto al clip previo).
+// En una sección los cortes caen secos al beat; en un arranque de sección la
+// transición será más larga/suave (lo decide Remotion con `sectionStart`).
 export function beatAlignClips(clips: ReelClip[], track: Track): ReelClip[] {
   const spb = secondsPerBeat(track.bpm);
   const framesPerBeat = spb * FPS;
+  let prevLabel: string | null = null;
   return clips.map((c) => {
     const beats = beatsForClip(track.energy, c, spb);
-    return { ...c, durationInFrames: Math.max(1, Math.round(beats * framesPerBeat)) };
+    const sectionStart = prevLabel !== null && c.label !== prevLabel;
+    prevLabel = c.label;
+    return {
+      ...c,
+      durationInFrames: Math.max(1, Math.round(beats * framesPerBeat)),
+      sectionStart,
+    };
   });
 }

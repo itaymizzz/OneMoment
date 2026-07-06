@@ -11,6 +11,10 @@ export const reelClipSchema = z.object({
   kind: z.enum(["photo", "video"]),
   label: z.string().default(""), // etiqueta del momento (Ceremonia, Fiesta…)
   durationInFrames: z.number().int().positive(),
+  // Arranca una nueva "sección" (cambió el momento respecto al clip anterior):
+  // la transición de entrada será más larga/suave (crossfade) en vez de un
+  // corte seco al ritmo. Lo fija el servidor al construir la línea de tiempo.
+  sectionStart: z.boolean().default(false),
 });
 export type ReelClip = z.infer<typeof reelClipSchema>;
 
@@ -32,6 +36,12 @@ export const reelPropsSchema = z.object({
   // en cada golpe (más fuerte en el downbeat de cada compás de 4).
   bpm: z.number().positive().nullable().default(null),
   beatOffsetSec: z.number().min(0).default(0),
+  // Tiempos de beat/downbeat REALES (segundos), medidos del audio. Con tempo
+  // variable (pistas subidas o generadas) la rejilla de BPM constante no basta;
+  // si vienen estos arrays, el pulso "respira" en el beat real y destella más
+  // fuerte en el downbeat. Vacíos → se usa la rejilla de BPM constante.
+  beats: z.array(z.number()).default([]),
+  downbeats: z.array(z.number()).default([]),
   // ── Look / colorización cinematográfica ──
   look: lookSchema.default("cinematic"),
 });

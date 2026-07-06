@@ -81,11 +81,48 @@ fully-local OSS path; reserve cloud APIs for optional GPU-heavy bursts.
 
 ## Suggested integration order
 1. ✅ Beat-synced music + cinematic grade (declared-BPM tracks) — **done**
-2. Real beat detection for arbitrary tracks (librosa/Essentia microservice);
-   downbeat-driven hard cuts + section-aware transitions.
-3. FFmpeg `lut3d` grade pass with curated wedding LUT packs + exposure matching.
-4. Facet-style curation (faces/smiles/eyes/aesthetics) folded into `lib/process.ts`.
-5. Selective enhancement: vidstab stabilize → GFPGAN face-restore → RIFE/FILM slow-mo.
+2. ✅ Real beat detection — **done, LOCAL (no API)**. `lib/ai/beat-detect.ts`:
+   FFmpeg decodes → spectral-flux onset envelope (in-house FFT) → autocorrelation
+   tempo (log-normal prior ~120) → phase-aligned beat grid → 4/4 downbeats.
+   Validated on the demo beds: 89/112/129 vs true 90/110/128 BPM. Beats +
+   downbeats flow to Remotion (`beats`/`downbeats` props); the pulse follows the
+   real beat and section changes (moment boundaries) get soft crossfades while
+   within-section cuts stay snappy (`sectionStart`). Music.ai stays as a cloud
+   fallback; declared BPM as the last resort.
+3. ✅ LUT grade + exposure matching — **done, LOCAL**. `scripts/gen-lut.mjs` now
+   builds a **pack** (`teal-orange`, `warm-romance`, `bw-film`, `moody-cool`,
+   `vibrant`); pick with `GRADE_LUT=<name>`. `lib/ai/normalize.ts` does per-shot
+   exposure + gray-world white-balance matching (sharp) BEFORE the global LUT, so
+   shots from dozens of phones agree. Runs by default; `NORMALIZE=0` to disable.
+4. ✅ Facet-style curation — **done, LOCAL**. `lib/ai/aesthetics.ts` scores the
+   non-face Facet dims (colorfulness, contrast, dynamic range, saturation,
+   exposure, composition/saliency) with sharp on a 64×64 thumb; folded into
+   `lib/process.ts` quality (40% weight). Faces/smiles/eyes stay on the cloud
+   layer (Rekognition/Claude) — now persisted to `hasFaces`/`faceCount`. Local
+   face ML (InsightFace/Facet microservice) remains the one open premium hook.
+5. ✅ Selective video enhancement — **done, LOCAL**. `lib/ai/video-enhance.ts`:
+   FFmpeg vidstab 2-pass stabilization + unsharp, optional motion-interpolated
+   slow-mo (`minterpolate`, `VIDEO_SLOWMO=1`, short clips only). Applied to
+   selected video clips, cached as the `venh` variant. `VIDEO_ENHANCE=0` to
+   disable.
+
+### ⛔ Retired: generative photo enhancement (fal.ai)
+The fal.ai layer (clarity-upscaler / GFPGAN) was **removed on purpose**
+(2026-07-06): it *regenerates* detail, so faces came out looking AI-painted.
+Decision: guest faces are never touched by generative models. Photo prep is
+ONLY the local exposure/white-balance normalization (`lib/ai/normalize.ts`),
+which shifts color/brightness but cannot invent features. `FAL_KEY` is
+commented out in `.env`, `@fal-ai/client` uninstalled, `lib/ai/enhance.ts`
+deleted. Don't re-add without an explicit product decision.
+
+### Node-local layer shipped this round (the "keep media in-house" principle)
+All of 2–5 above now have a **fully local, no-API, self-hostable** path built on
+the full FFmpeg build + `sharp` — the cloud services (Music.ai, fal, Claude,
+Rekognition) remain optional "premium" upgrades that light up when their key is
+present. Shared FFmpeg capability resolver: `lib/ai/ffmpeg.ts` (picks a build
+that actually has `lut3d` / `vidstab` / `minterpolate`, not Remotion's minimal
+one). Verified end-to-end: `tsc` + `eslint` clean, full reel render with the new
+beat/section props succeeds (252 frames, browser-safe yuv420p h264).
 
 ## Open questions (from research)
 - Replicate cost-per-unit for Real-ESRGAN Video / FILM at wedding-gallery scale.

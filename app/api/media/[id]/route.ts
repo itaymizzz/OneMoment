@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { readMedia } from "@/lib/storage";
-import { enhancedName } from "@/lib/ai/enhance";
+import { enhancedName } from "@/lib/ai/normalize";
+import { videoEnhancedName } from "@/lib/ai/video-enhance";
 
 // Anulación manual del dueño: fijar (pinned) u ocultar (hidden) una pieza.
 // Mantenemos `selected`/`isBlurry`/`isDuplicate` coherentes al instante para
@@ -67,14 +68,24 @@ export async function GET(
   const item = await prisma.mediaItem.findUnique({ where: { id } });
   if (!item) return new NextResponse("No encontrado", { status: 404 });
 
-  const wantEnhanced =
-    new URL(req.url).searchParams.get("v") === "enhanced";
+  // Variantes preparadas por la IA:
+  //   ?v=enhanced → foto normalizada/mejorada (enh-…)
+  //   ?v=venh     → vídeo estabilizado/mejorado (venh-….mp4, siempre h264)
+  const variant = new URL(req.url).searchParams.get("v");
 
   try {
     let buf: Buffer;
-    if (wantEnhanced) {
+    let contentType = item.mimeType;
+    if (variant === "enhanced") {
       try {
         buf = await readMedia(item.eventId, enhancedName(item.filename));
+      } catch {
+        buf = await readMedia(item.eventId, item.filename); // fallback original
+      }
+    } else if (variant === "venh") {
+      try {
+        buf = await readMedia(item.eventId, videoEnhancedName(item.filename));
+        contentType = "video/mp4"; // el vídeo mejorado siempre es mp4 h264
       } catch {
         buf = await readMedia(item.eventId, item.filename); // fallback original
       }
@@ -83,7 +94,7 @@ export async function GET(
     }
     return new NextResponse(new Uint8Array(buf), {
       headers: {
-        "Content-Type": item.mimeType,
+        "Content-Type": contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });

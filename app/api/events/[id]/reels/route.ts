@@ -1,15 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
+import { existsSync } from "fs";
 import { prisma } from "@/lib/db";
-import { ensureReelsDir, readMedia, saveBuffer } from "@/lib/storage";
+import { ensureReelsDir, readMedia, saveBuffer, mediaPath } from "@/lib/storage";
 import { renderReel } from "@/lib/render";
 import { MOMENTS, MOMENT_LABEL } from "@/lib/types";
 import { pickTrack, beatAlignClips, type Track } from "@/lib/music";
 import { ai } from "@/lib/ai/config";
-import { enhancePhoto, enhancedName } from "@/lib/ai/enhance";
+import { normalizePhoto, enhancedName } from "@/lib/ai/normalize";
+import {
+  enhanceVideo,
+  videoEnhancedName,
+  videoEnhanceAvailable,
+} from "@/lib/ai/video-enhance";
 import { generateEventTrack } from "@/lib/ai/music-gen";
 import { detectBeats } from "@/lib/ai/beats";
+import { detectBeatsLocal } from "@/lib/ai/beat-detect";
 import { resolveLut, applyLut } from "@/lib/ai/grade";
+
+const STORAGE_ROOT =
+  process.env.STORAGE_ROOT || path.join(process.cwd(), "storage");
+
+// Ruta en disco de la pista elegida, para analizar sus beats en local. Las del
+// catálogo viven en public/music/; las generadas por IA en STORAGE_ROOT/music-gen/.
+function resolveTrackPath(
+  track: Track,
+  gen: { url: string; bpm: number } | null,
+): string | null {
+  let p: string | null = null;
+  if (gen && track.id === "gen") {
+    const file = gen.url.split("/").pop();
+    p = file ? path.join(STORAGE_ROOT, "music-gen", file) : null;
+  } else if (track.file.startsWith("/")) {
+    p = path.join(process.cwd(), "public", track.file);
+  }
+  return p && existsSync(p) ? p : null;
+}
 import { baseUrl } from "@/lib/base-url";
 import {
   FPS,
@@ -121,21 +147,52 @@ export async function POST(
   });
   media = media.slice(0, cfg.maxClips);
 
-  // ── Mejora IA opcional de las fotos seleccionadas (fal.ai) ──
-  // Si hay FAL_KEY, mejoramos (upscale/restauración) y cacheamos el resultado.
-  const enhanced = new Set<string>();
-  if (ai.fal) {
+  // ── Preparación por foto: normalización de exposición/WB (local, siempre) ──
+  // Emparejar las exposiciones ANTES del LUT hace que el look de color case en
+  // todas las tomas (fotos de decenas de móviles distintos). SOLO ajusta
+  // exposición y balance de blancos — nunca regenera detalle ni toca caras (la
+  // mejora generativa tipo upscaler se retiró: inventaba piel/rasgos "de IA").
+  // El resultado se cachea como la variante "enhanced" y se sirve con
+  // ?v=enhanced. Desactivable con NORMALIZE=0.
+  const prepared = new Set<string>();
+  if (process.env.NORMALIZE !== "0") {
     for (const m of media) {
       if (m.kind === "video") continue;
       try {
         const buf = await readMedia(m.eventId, m.filename);
-        const out = await enhancePhoto(buf);
-        if (out) {
-          await saveBuffer(m.eventId, enhancedName(m.filename), out);
-          enhanced.add(m.id);
-        }
+        const out = await normalizePhoto(buf); // exposición/WB por toma (local)
+        await saveBuffer(m.eventId, enhancedName(m.filename), out);
+        prepared.add(m.id);
       } catch {
         /* si falla una foto, usamos la original */
+      }
+    }
+  }
+
+  // ── Mejora de vídeo local (estabilización + enfoque, opcional cámara lenta) ──
+  // FFmpeg con vidstab; sin claves ni GPU. Estabiliza los clips movidos y, si
+  // VIDEO_SLOWMO=1, ralentiza con interpolación los clips muy cortos. Se cachea
+  // como variante "venh" y se sirve con ?v=venh. Desactivable con VIDEO_ENHANCE=0.
+  const venh = new Set<string>();
+  if (process.env.VIDEO_ENHANCE !== "0" && videoEnhanceAvailable()) {
+    const slowmoOn = process.env.VIDEO_SLOWMO === "1";
+    for (const m of media) {
+      if (m.kind !== "video") continue;
+      try {
+        const durS = m.durationS ?? 0;
+        const ok = await enhanceVideo(
+          mediaPath(m.eventId, m.filename),
+          mediaPath(m.eventId, videoEnhancedName(m.filename)),
+          {
+            stabilize: true,
+            // Cámara lenta sólo en clips muy cortos (un guiño, no toda la peli).
+            slowmo: slowmoOn && durS > 0 && durS <= 2.5,
+            slowmoFactor: 1.6,
+          },
+        );
+        if (ok) venh.add(m.id);
+      } catch {
+        /* si falla un vídeo, usamos el original */
       }
     }
   }
@@ -145,14 +202,21 @@ export async function POST(
     const secs = isVideo
       ? Math.min(m.durationS ?? cfg.photoSec, cfg.videoCapSec)
       : cfg.photoSec;
-    const v = enhanced.has(m.id) ? "?v=enhanced" : "";
+    const v = isVideo
+      ? venh.has(m.id)
+        ? "?v=venh"
+        : ""
+      : prepared.has(m.id)
+        ? "?v=enhanced"
+        : "";
     return {
       id: m.id,
       url: `${baseUrl()}/api/media/${m.id}${v}`,
       kind: isVideo ? "video" : "photo",
       label: m.moment ? MOMENT_LABEL[m.moment]?.label ?? "" : "",
       durationInFrames: Math.max(1, Math.round(secs * FPS)),
-    };
+      sectionStart: false, // lo fija beatAlignClips según el cambio de momento
+    } as ReelClip;
   });
 
   // ── Música: generada a medida (si hay clave) o del catálogo local ──
@@ -167,11 +231,27 @@ export async function POST(
     track = pickTrack(format, id);
   }
 
-  // ── Detección real de beats (opcional, sólo pistas de tempo incierto) ──
-  // Las pistas del catálogo tienen BPM conocido. Las generadas por IA declaran
-  // el BPM del prompt, pero el audio real puede desviarse; si hay Music.ai,
-  // medimos el BPM/primer beat reales para que la rejilla y el pulso encajen.
-  if (gen && ai.musicai) {
+  // ── Detección REAL de beats (LOCAL, sin claves) ──
+  // Medimos tempo, beats y downbeats del audio real, 100% en casa. Para pistas
+  // del catálogo (BPM conocido) confirma la rejilla y aporta los downbeats para
+  // el latido; para pistas generadas por IA (tempo incierto) corrige el BPM
+  // declarado. Si el análisis local falla y hay Music.ai para una pista
+  // generada, se intenta la nube como respaldo.
+  let realBeats: number[] = [];
+  let realDownbeats: number[] = [];
+  const trackAbsPath = resolveTrackPath(track, gen);
+  if (trackAbsPath) {
+    const local = await detectBeatsLocal(trackAbsPath);
+    if (local) {
+      realBeats = local.beats;
+      realDownbeats = local.downbeats;
+      // La pista generada declara el BPM del prompt; el audio real manda.
+      track = gen
+        ? { ...track, bpm: local.bpm, beatOffsetSec: local.beatOffsetSec }
+        : { ...track, beatOffsetSec: local.beatOffsetSec };
+    }
+  }
+  if (realBeats.length === 0 && gen && ai.musicai) {
     const detected = await detectBeats(`${baseUrl()}${track.file}`);
     if (detected) {
       track = {
@@ -179,6 +259,7 @@ export async function POST(
         bpm: detected.bpm,
         beatOffsetSec: detected.beats[0] ?? track.beatOffsetSec,
       };
+      realBeats = detected.beats;
     }
   }
 
@@ -198,6 +279,8 @@ export async function POST(
     audioUrl: `${baseUrl()}${track.file}`,
     bpm: track.bpm,
     beatOffsetSec: track.beatOffsetSec,
+    beats: realBeats,
+    downbeats: realDownbeats,
     look: lut ? "none" : "cinematic",
   };
 

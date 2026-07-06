@@ -4,6 +4,7 @@ import { readMedia } from "./storage";
 import { MOMENTS, MOMENT_LABEL } from "./types";
 import { ai } from "./ai/config";
 import { curatePhoto } from "./ai/curate";
+import { analyzeAesthetics } from "./ai/aesthetics";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Capa de IA "simple" (sin modelos pesados): puntúa calidad, detecta borrosas y
@@ -51,6 +52,7 @@ type Metrics = {
   width: number;
   height: number;
   hash: string;
+  aesthetic?: number; // 0..1 puntuación estética local (Facet-style), fresh only
 };
 
 // Métricas técnicas de una foto.
@@ -61,12 +63,14 @@ async function photoMetrics(buf: Buffer): Promise<Metrics> {
   const colour = stats.channels.slice(0, 3);
   const brightness =
     colour.reduce((a, c) => a + c.mean, 0) / (colour.length * 255);
+  const aes = await analyzeAesthetics(buf);
   return {
     sharpness: stats.sharpness ?? 0,
     brightness,
     width: meta.width ?? 0,
     height: meta.height ?? 0,
     hash: await perceptualHash(buf),
+    aesthetic: aes?.score ?? 0.5,
   };
 }
 
@@ -184,7 +188,11 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
     const sharpScore = clamp01(m.sharpness / (median > 0 ? median * 1.5 : 1));
     const resScore = clamp01(Math.min(m.width, m.height) / 1080);
     const expScore = 1 - exposurePenalty(m.brightness);
-    const q = clamp01(0.55 * sharpScore + 0.25 * resScore + 0.2 * expScore);
+    // Estética local (Facet-style): color, contraste, rango dinámico, composición…
+    const aesScore = m.aesthetic ?? 0.5;
+    const q = clamp01(
+      0.32 * sharpScore + 0.13 * resScore + 0.15 * expScore + 0.4 * aesScore,
+    );
     quality.set(w.id, q);
     if (m.sharpness > 0 && median > 0 && m.sharpness < blurThreshold) blurry.add(w.id);
   }
@@ -193,6 +201,7 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
   // Sólo si hay claves. Para acotar costo, curamos los mejores candidatos por
   // calidad técnica (top N) y mezclamos la estética/emoción en su puntuación.
   const aiMoment = new Map<string, string>();
+  const aiFaces = new Map<string, { faces: number; smile: boolean }>();
   if (ai.anthropic || ai.aws) {
     const fileOf = new Map(items.map((it) => [it.id, it.filename]));
     const CURATE_MAX = Number(process.env.AI_CURATE_MAX || 60);
@@ -213,6 +222,7 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
         if (score.faces > 0 && score.smile) q = Math.min(1, q * 1.1); // premia sonrisas
         quality.set(w.id, q);
         if (score.moment) aiMoment.set(w.id, score.moment);
+        aiFaces.set(w.id, { faces: score.faces, smile: score.smile });
       } catch {
         /* si falla una foto, seguimos con las demás */
       }
@@ -308,6 +318,13 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
         isDuplicate: finalDuplicate,
         dupGroup: groupOf.get(w.id) ?? null,
         moment: momentKey,
+        // Caras de la capa de curación (Rekognition/Claude), si estuvo activa.
+        ...(aiFaces.has(w.id)
+          ? {
+              hasFaces: aiFaces.get(w.id)!.faces > 0,
+              faceCount: aiFaces.get(w.id)!.faces,
+            }
+          : {}),
         ...(m ? { width: m.width || null, height: m.height || null } : {}),
         caption: (() => {
           // Etiqueta preferida: la del momento detectado por IA, si existe.
