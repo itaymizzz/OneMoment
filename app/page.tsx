@@ -100,7 +100,7 @@ export default function Home() {
           </p>
 
           <h1
-            className="font-display title-in mt-6 text-[clamp(2.9rem,11.5vw,4.25rem)] font-light leading-[1.03] lg:text-[4.6rem]"
+            className="font-display title-in-lcp mt-6 text-[clamp(2.9rem,11.5vw,4.25rem)] font-light leading-[1.03] lg:text-[4.6rem]"
             style={{ animationDelay: "280ms", textWrap: "balance" }}
           >
             Tus invitados capturan. La IA crea la{" "}
@@ -474,7 +474,7 @@ export default function Home() {
 function Mark({ on, accent }: { on: boolean; accent?: boolean }) {
   if (!on) {
     return (
-      <span aria-label="No incluido" className="text-muted/50">
+      <span aria-label="No incluido" className="text-muted/70">
         —
       </span>
     );

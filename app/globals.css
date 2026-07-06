@@ -122,6 +122,17 @@ body {
   animation: titleIn 0.9s cubic-bezier(0.25, 0.1, 0.25, 1) both;
 }
 
+/* Variante para el elemento LCP (el H1): Chrome descarta del LCP lo que
+   se pinta por primera vez con opacity 0, así que arranca en 0.12 —
+   visualmente sigue siendo un fundido, pero la métrica existe. */
+@keyframes titleInLcp {
+  from { opacity: 0.12; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+.title-in-lcp {
+  animation: titleInLcp 0.9s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
 /* Línea vertical del "desliza" del hero. */
 @keyframes scrollCue {
   0% { transform: scaleY(0); transform-origin: top; }
@@ -189,7 +200,7 @@ select option {
   color: var(--foreground);
 }
 ::placeholder {
-  color: rgba(156, 148, 138, 0.55);
+  color: rgba(156, 148, 138, 0.68);
 }
 
 /* ── Marco del tráiler (9:16): pantalla en la sala oscura ── */
