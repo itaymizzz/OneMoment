@@ -37,6 +37,7 @@ export const RemotionRoot = () => {
         musicCredit: "Música: Kevin MacLeod (incompetech.com) · CC BY 4.0",
         clips: [],
         audioUrl: null,
+        audioStartSec: 0,
         bpm: null,
         beatOffsetSec: 0,
         beats: [],

@@ -11,11 +11,16 @@ import { Video } from "@remotion/media";
 import type { Look } from "./types";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
-import { buildTimeline, Segment, ReelProps } from "./types";
+import { buildTimeline, FPS, Segment, ReelProps } from "./types";
 
-const GOLD = "#e8b04b";
-const MAGENTA = "#d65db1";
-const BG = "#0b0b0f";
+// "La Première" dentro de la película: oro antiguo (nunca gradiente), negro
+// cálido de sala, marfil. Serif (Georgia ≈ voz display) + mono para metadatos
+// — tipografías de sistema: el Chrome headless del render las tiene siempre.
+const GOLD = "#c6a15b";
+const IVORY = "#f2ede3";
+const BG = "#0b0a08";
+const SERIF = "Georgia, 'Times New Roman', serif";
+const MONO = "'Courier New', monospace";
 
 // ── Sincronía al beat ───────────────────────────────────────────────────────
 // Devuelve un factor de escala que "late" en cada beat (más fuerte en el
@@ -325,11 +330,12 @@ function ClipFrame({
         >
           <div
             style={{
+              fontFamily: SERIF,
               fontSize: 48, // mínimo de legibilidad del spec (§6)
-              fontWeight: 600,
-              color: "#fff",
+              fontWeight: 500,
+              color: IVORY,
               letterSpacing: 0.3,
-              textShadow: "0 2px 18px rgba(0,0,0,0.7)",
+              textShadow: "0 2px 18px rgba(0,0,0,0.75)",
             }}
           >
             <span style={{ color: GOLD }}>—</span> {clip.label}
@@ -394,33 +400,50 @@ function TitleOverlay({
         opacity,
       }}
     >
-      <div style={{ translate: `0px ${y}px` }}>
+      {/* Scrim radial tras el título (spec §6): sobre una toma clara, las
+          líneas mono pequeñas se lavaban sin esto. Sutil: oscurece el centro
+          ~50% y se disuelve antes de los bordes. */}
+      <AbsoluteFill
+        style={{
+          background:
+            "radial-gradient(58% 26% at 50% 50%, rgba(5,4,3,0.55), rgba(5,4,3,0.28) 55%, transparent 78%)",
+          pointerEvents: "none",
+        }}
+      />
+      <div style={{ translate: `0px ${y}px`, position: "relative" }}>
+        {/* Cartela mono (A24): metadato, no logo gritón. Marfil, no oro: el
+            oro sobre una toma cálida/naranja se pierde (el oro vive en la
+            línea divisoria). */}
         <div
           style={{
-            fontSize: 24,
-            letterSpacing: 7,
+            fontFamily: MONO,
+            fontSize: 22,
+            letterSpacing: 8,
             textTransform: "uppercase",
-            color: GOLD,
-            textShadow: "0 2px 18px rgba(0,0,0,0.75)",
+            color: "rgba(242,237,227,0.92)",
+            textShadow: "0 2px 14px rgba(0,0,0,0.85)",
           }}
         >
-          OneMoment
+          OneMoment presenta
         </div>
         <div
           style={{
-            width: 180,
-            height: 2,
-            margin: "20px auto",
-            background: `linear-gradient(90deg, ${GOLD}, ${MAGENTA})`,
+            width: 140,
+            height: 1.5,
+            margin: "22px auto",
+            background: GOLD,
+            boxShadow: "0 1px 8px rgba(0,0,0,0.6)",
           }}
         />
+        {/* Serif ligera a gran tamaño: la firma del estudio. */}
         <div
           style={{
-            fontSize: 70,
-            fontWeight: 700,
-            color: "#fff",
-            lineHeight: 1.05,
-            textShadow: "0 3px 30px rgba(0,0,0,0.8)",
+            fontFamily: SERIF,
+            fontSize: 74,
+            fontWeight: 400,
+            color: IVORY,
+            lineHeight: 1.08,
+            textShadow: "0 3px 30px rgba(0,0,0,0.85)",
           }}
         >
           {title}
@@ -428,10 +451,13 @@ function TitleOverlay({
         {meta ? (
           <div
             style={{
-              marginTop: 16,
-              fontSize: 26,
-              color: "rgba(255,255,255,0.85)",
-              textShadow: "0 2px 16px rgba(0,0,0,0.75)",
+              fontFamily: MONO,
+              marginTop: 20,
+              fontSize: 22,
+              letterSpacing: 3,
+              textTransform: "uppercase",
+              color: "rgba(242,237,227,0.85)",
+              textShadow: "0 2px 14px rgba(0,0,0,0.8)",
             }}
           >
             {meta}
@@ -461,24 +487,39 @@ function OutroCard({
       }}
     >
       <div style={{ opacity }}>
-        <div style={{ fontSize: 30, color: "rgba(245,245,247,0.65)" }}>
+        {/* Créditos de cierre: serif itálica + wordmark en oro SÓLIDO (el
+            gradiente magenta murió con "La Première") + metadatos en mono. */}
+        <div
+          style={{
+            fontFamily: SERIF,
+            fontStyle: "italic",
+            fontSize: 32,
+            color: "rgba(242,237,227,0.7)",
+          }}
+        >
           Una película hecha por todos.
         </div>
         <div
           style={{
-            marginTop: 16,
-            fontSize: 54,
-            fontWeight: 700,
-            backgroundImage: `linear-gradient(90deg, ${GOLD}, ${MAGENTA})`,
-            backgroundClip: "text",
-            WebkitBackgroundClip: "text",
-            color: "transparent",
+            fontFamily: SERIF,
+            marginTop: 18,
+            fontSize: 58,
+            fontWeight: 500,
+            color: GOLD,
           }}
         >
           OneMoment
         </div>
         {dateLabel ? (
-          <div style={{ marginTop: 18, fontSize: 28, color: "rgba(245,245,247,0.55)", letterSpacing: 2 }}>
+          <div
+            style={{
+              fontFamily: MONO,
+              marginTop: 22,
+              fontSize: 24,
+              letterSpacing: 5,
+              color: "rgba(242,237,227,0.6)",
+            }}
+          >
             {dateLabel}
           </div>
         ) : null}
@@ -487,10 +528,11 @@ function OutroCard({
         {musicCredit ? (
           <div
             style={{
-              marginTop: 34,
-              fontSize: 19,
-              color: "rgba(245,245,247,0.4)",
-              letterSpacing: 0.5,
+              fontFamily: MONO,
+              marginTop: 36,
+              fontSize: 17,
+              letterSpacing: 1,
+              color: "rgba(242,237,227,0.42)",
             }}
           >
             {musicCredit}
@@ -553,7 +595,14 @@ export function Reel(props: ReelProps) {
 
   return (
     <AbsoluteFill style={{ backgroundColor: BG }}>
-      {props.audioUrl ? <Audio src={props.audioUrl} loop volume={0.85} /> : null}
+      {props.audioUrl ? (
+        <Audio
+          src={props.audioUrl}
+          loop
+          volume={0.85}
+          startFrom={Math.round(props.audioStartSec * FPS)}
+        />
+      ) : null}
       <TransitionSeries>{children}</TransitionSeries>
     </AbsoluteFill>
   );
