@@ -1,0 +1,28 @@
+{
+  "_doc": "Motor de precios (lib/pricing.ts). Paquetes por TAMAÑO de evento — todos incluyen todo (reel+tráiler+película, sin marca, muro en vivo, música, galería 12 meses, ZIP); lo que escala es el número de subidas. Costes del all-in medidos en docs/COST_MODEL.md (con R2 para el storage a 12 meses). marginFloor: el precio efectivo JAMÁS baja del margen 80% — si un precio configurado lo violara, el motor lo sube y lo avisa en logs.",
+  "packages": [
+    { "id": "demo", "label": "Demo", "uploads": 30, "priceUsd": 0 },
+    { "id": "p100", "label": "100 fotos", "uploads": 100, "priceUsd": 39 },
+    { "id": "p300", "label": "300 fotos", "uploads": 300, "priceUsd": 69 },
+    { "id": "p800", "label": "800 fotos", "uploads": 800, "priceUsd": 119 }
+  ],
+  "custom": {
+    "maxUploads": 20000,
+    "baseUsd": 19,
+    "tiers": [
+      { "upTo": 100, "perUpload": 0.2 },
+      { "upTo": 300, "perUpload": 0.15 },
+      { "upTo": 800, "perUpload": 0.1 },
+      { "upTo": 2200, "perUpload": 0.075 },
+      { "upTo": 20000, "perUpload": 0.05 }
+    ]
+  },
+  "cost": {
+    "_doc": "All-in por evento (12 meses, R2 tras 30 días) — ver COST_MODEL.md §7. fijo = cuota amortizada + render; porUpload = IA (Haiku+Rekognition sobre ~80% fotos) + egress + storage 12m.",
+    "fixedUsd": 1.8,
+    "perUploadUsd": 0.01174,
+    "paymentFeePct": 0.029,
+    "paymentFeeFixedUsd": 0.3
+  },
+  "marginFloor": 0.8
+}

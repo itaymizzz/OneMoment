@@ -17,6 +17,14 @@ model Event {
   slug       String    @unique // usado en el link público /j/<slug>
   ownerToken String?   @unique // secreto del organizador: da acceso al panel /e/<id>
   ownerEmail String? // email del dueño: avisos + reclamo del evento a su cuenta
+  // ── Paquete por tamaño de evento ──
+  // plan/uploadLimit NULL = evento anterior al sistema de pagos: ilimitado y
+  // sin marca de agua (grandfathered — no se le rompe nada a nadie).
+  plan        String? // demo | p100 | p300 | p800 | custom
+  uploadLimit Int? // tope de subidas del paquete (null = sin tope)
+  paidCents   Int? // total pagado (para upgrades: se paga la diferencia)
+  paidAt      DateTime?
+  stripeSession String? // última sesión de checkout completada (idempotencia)
   userId     String? // cuenta dueña (null = evento legado, sólo owner-token)
   user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   name       String // "Boda de Barak & ..."
