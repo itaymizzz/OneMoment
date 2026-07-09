@@ -7,6 +7,7 @@ import {
   PlayIcon,
   StarIcon,
   EyeOffIcon,
+  TrashIcon,
 } from "@/app/components/icons";
 
 type Override = { pinned?: boolean; hidden?: boolean };
@@ -15,10 +16,12 @@ function Thumb({
   m,
   onOpen,
   onOverride,
+  onDelete,
 }: {
   m: Media;
   onOpen: (m: Media) => void;
   onOverride: (id: string, patch: Override) => void;
+  onDelete: (m: Media) => void;
 }) {
   const src = `/api/media/${m.id}`;
   const dimmed = (m.isBlurry || m.isDuplicate || m.hidden) && !m.pinned;
@@ -100,6 +103,15 @@ function Thumb({
         >
           <EyeOffIcon width={14} height={14} />
         </button>
+        <button
+          type="button"
+          onClick={() => onDelete(m)}
+          title="Borrar definitivamente"
+          aria-label="Borrar definitivamente"
+          className="rounded bg-black/60 p-1 text-white backdrop-blur hover:bg-red-600"
+        >
+          <TrashIcon width={14} height={14} />
+        </button>
       </div>
 
       {m.status === "pending" || m.status === "processing" ? (
@@ -122,10 +134,12 @@ function Lightbox({
   m,
   onClose,
   onOverride,
+  onDelete,
 }: {
   m: Media;
   onClose: () => void;
   onOverride: (id: string, patch: Override) => void;
+  onDelete: (m: Media) => void;
 }) {
   const src = `/api/media/${m.id}`;
   useEffect(() => {
@@ -186,6 +200,12 @@ function Lightbox({
             >
               <DownloadIcon width={16} height={16} /> Descargar
             </a>
+            <button
+              onClick={() => onDelete(m)}
+              className="inline-flex items-center gap-1.5 text-red-400 hover:text-red-300"
+            >
+              <TrashIcon width={16} height={16} /> Borrar
+            </button>
             <button onClick={onClose} className="hover:text-white">
               Cerrar
             </button>
@@ -258,6 +278,22 @@ export default function Gallery({
     }
   }
 
+  // Borrado definitivo (con confirmación). Quita la pieza de la UI al instante;
+  // si el servidor falla, el refresco en vivo la repone (estado consistente).
+  async function remove(m: Media) {
+    const ok = window.confirm(
+      "¿Borrar esta foto/video DEFINITIVAMENTE?\n\nSe elimina del servidor y de la película. No se puede deshacer.",
+    );
+    if (!ok) return;
+    setActive((a) => (a && a.id === m.id ? null : a));
+    setMedia((prev) => prev.filter((x) => x.id !== m.id));
+    try {
+      await fetch(`/api/media/${m.id}`, { method: "DELETE" });
+    } catch {
+      /* el próximo refresco repone si no llegó a borrarse */
+    }
+  }
+
   const pending = media.filter((m) => m.status === "pending" || m.status === "processing").length;
 
   if (media.length === 0) {
@@ -286,6 +322,7 @@ export default function Gallery({
           m={active}
           onClose={() => setActive(null)}
           onOverride={override}
+          onDelete={remove}
         />
       )}
       <div className="mb-4 flex items-center justify-between">
@@ -294,6 +331,13 @@ export default function Gallery({
           <span className="text-sm font-normal text-muted">
             ({media.length} archivos{pending > 0 ? ` · ${pending} analizándose` : ""})
           </span>
+          <a
+            href={`/api/events/${eventId}/download`}
+            className="ml-3 inline-flex items-center gap-1 align-middle text-xs font-normal text-muted underline underline-offset-2 hover:text-foreground"
+            title="Descargar todos los originales en un .zip"
+          >
+            <DownloadIcon width={13} height={13} /> Descargar todo (.zip)
+          </a>
         </h2>
         <div className="flex gap-1 rounded-lg border border-border p-0.5 text-sm">
           <button
@@ -329,7 +373,7 @@ export default function Gallery({
             </p>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
               {best.map((m) => (
-                <Thumb key={m.id} m={m} onOpen={setActive} onOverride={override} />
+                <Thumb key={m.id} m={m} onOpen={setActive} onOverride={override} onDelete={remove} />
               ))}
             </div>
           </>
@@ -337,7 +381,7 @@ export default function Gallery({
       ) : view === "grid" ? (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
           {media.map((m) => (
-            <Thumb key={m.id} m={m} onOpen={setActive} onOverride={override} />
+            <Thumb key={m.id} m={m} onOpen={setActive} onOverride={override} onDelete={remove} />
           ))}
         </div>
       ) : (
@@ -350,7 +394,13 @@ export default function Gallery({
               </h3>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
                 {g.items.map((m) => (
-                  <Thumb key={m.id} m={m} onOpen={setActive} onOverride={override} />
+                  <Thumb
+                    key={m.id}
+                    m={m}
+                    onOpen={setActive}
+                    onOverride={override}
+                    onDelete={remove}
+                  />
                 ))}
               </div>
             </div>
@@ -362,7 +412,7 @@ export default function Gallery({
               </h3>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
                 {unsorted.map((m) => (
-                  <Thumb key={m.id} m={m} onOpen={setActive} onOverride={override} />
+                  <Thumb key={m.id} m={m} onOpen={setActive} onOverride={override} onDelete={remove} />
                 ))}
               </div>
             </div>

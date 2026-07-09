@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import QRCode from "qrcode";
@@ -7,6 +8,7 @@ import Gallery from "./Gallery";
 import ReelStudio from "./ReelStudio";
 import EventTabs from "./EventTabs";
 import ClaimOwner from "./ClaimOwner";
+import DangerZone from "./DangerZone";
 import { baseUrl } from "@/lib/base-url";
 import { ownerCookieName, tokenMatches } from "@/lib/owner";
 
@@ -45,9 +47,9 @@ export default async function EventDashboard({
             Este panel es privado del organizador del evento. Ábrelo desde el
             dispositivo donde lo creaste, o con tu enlace privado de organizador.
           </p>
-          <a href="/" className="btn-primary mt-6 inline-block px-5 py-2.5 text-sm">
+          <Link href="/" className="btn-primary mt-6 inline-block px-5 py-2.5 text-sm">
             Volver al inicio
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -68,9 +70,9 @@ export default async function EventDashboard({
         <ClaimOwner eventId={event.id} token={event.ownerToken as string} />
       ) : null}
       <div className="mx-auto max-w-6xl px-6 py-10">
-        <a href="/" className="text-sm text-muted hover:text-foreground">
+        <Link href="/" className="text-sm text-muted hover:text-foreground">
           ← OneMoment
-        </a>
+        </Link>
 
         <header className="mt-4 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -118,6 +120,7 @@ export default async function EventDashboard({
           <div className="space-y-6">
             <ReelStudio eventId={event.id} />
             <Gallery eventId={event.id} initial={event.media} />
+            <DangerZone eventId={event.id} eventName={event.name} />
           </div>
         </div>
       </div>

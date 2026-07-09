@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { readMedia } from "@/lib/storage";
+import { readMedia, deleteMediaFiles } from "@/lib/storage";
 import { enhancedName } from "@/lib/ai/normalize";
 import { videoEnhancedName } from "@/lib/ai/video-enhance";
 import { requestIsOwner } from "@/lib/owner";
@@ -84,6 +84,33 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 });
   }
+}
+
+// Borrado DEFINITIVO de una pieza: archivo (y variantes IA) fuera del disco y
+// fila fuera de la base. "Ocultar" no basta para una foto inapropiada en una
+// boda — esto la elimina de verdad. Sólo el dueño del evento.
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const item = await prisma.mediaItem.findUnique({
+    where: { id },
+    select: { eventId: true, filename: true },
+  });
+  if (!item) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  if (!(await requestIsOwner(req, item.eventId))) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
+
+  // Primero la base (la galería deja de listarla al instante), luego el disco.
+  await prisma.mediaItem.delete({ where: { id } });
+  await deleteMediaFiles(item.eventId, [
+    item.filename,
+    enhancedName(item.filename),
+    videoEnhancedName(item.filename),
+  ]);
+  return NextResponse.json({ deleted: id });
 }
 
 // Sirve el archivo binario de un MediaItem desde el storage local.

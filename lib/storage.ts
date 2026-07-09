@@ -34,6 +34,30 @@ export async function readMedia(
   return fs.readFile(mediaPath(eventId, filename));
 }
 
+// Borra un archivo de medio y sus variantes generadas (enh-/venh-). Silencioso
+// si alguna variante no existe: borrar debe ser idempotente.
+export async function deleteMediaFiles(
+  eventId: string,
+  filenames: string[],
+): Promise<void> {
+  for (const f of filenames) {
+    try {
+      await fs.unlink(mediaPath(eventId, f));
+    } catch {
+      /* ya no existe */
+    }
+  }
+}
+
+// Borra TODO el directorio de un evento (medios, variantes y reels).
+export async function deleteEventDir(eventId: string): Promise<void> {
+  // Nunca borrar la raíz por un id vacío/raro.
+  if (!eventId || eventId.includes("/") || eventId.includes("\\") || eventId.includes("..")) {
+    throw new Error("eventId inválido");
+  }
+  await fs.rm(path.join(STORAGE_ROOT, eventId), { recursive: true, force: true });
+}
+
 // ----- Reels generados por la IA -----
 export async function ensureReelsDir(eventId: string): Promise<string> {
   const dir = path.join(STORAGE_ROOT, eventId, "reels");
