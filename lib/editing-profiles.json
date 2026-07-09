@@ -1,0 +1,103 @@
+{
+  "_doc": "Perfiles de edición por tipo de evento. Ajustables SIN tocar código. pacing = beats por foto en cada fase (enteros: los cortes viven en el beat); thresholds = dónde termina cada fase (fracción del reel); effects = multiplicadores 0..1 sobre la intensidad base de cada sección (0 = quieto); vibes = vibe musical por formato; grade = LUT del pack (public/luts); captionTone = voz de las cartelas (documental, para futuros textos).",
+  "wedding": {
+    "label": "Boda",
+    "structure": "emocional: respira lento, clímax en el drop, cierre largo y quieto",
+    "pacing": { "hook": 5, "intro": 4, "build": 3, "party": 2, "close": 7 },
+    "thresholds": { "introEnd": 0.25, "buildEnd": 0.5 },
+    "effects": { "pulse": 0.55, "flash": 0.5, "motion": 0.8 },
+    "vibes": { "reel": "romantico", "trailer": "cinematico", "film": "romantico" },
+    "grade": "warm-romance",
+    "captionTone": "elegante"
+  },
+  "birthday": {
+    "label": "Cumpleaños",
+    "structure": "alegre: arranque directo, fiesta sostenida, cierre cálido",
+    "pacing": { "hook": 4, "intro": 3, "build": 2, "party": 2, "close": 4 },
+    "thresholds": { "introEnd": 0.2, "buildEnd": 0.45 },
+    "effects": { "pulse": 0.8, "flash": 0.7, "motion": 1 },
+    "vibes": { "reel": "fiesta", "trailer": "fiesta", "film": "cinematico" },
+    "grade": "teal-orange",
+    "captionTone": "alegre"
+  },
+  "barmitzvah": {
+    "label": "Bar Mitzvah",
+    "structure": "híbrido: ceremonia/familia en calma (intro largo) → subida de fiesta",
+    "pacing": { "hook": 5, "intro": 4, "build": 2, "party": 2, "close": 4 },
+    "thresholds": { "introEnd": 0.4, "buildEnd": 0.6 },
+    "effects": { "pulse": 0.7, "flash": 0.6, "motion": 0.9 },
+    "vibes": { "reel": "fiesta", "trailer": "cinematico", "film": "elegante" },
+    "grade": "teal-orange",
+    "captionTone": "familiar"
+  },
+  "batmitzvah": {
+    "label": "Bat Mitzvah",
+    "structure": "híbrido: ceremonia/familia en calma (intro largo) → subida de fiesta",
+    "pacing": { "hook": 5, "intro": 4, "build": 2, "party": 2, "close": 4 },
+    "thresholds": { "introEnd": 0.4, "buildEnd": 0.6 },
+    "effects": { "pulse": 0.7, "flash": 0.6, "motion": 0.9 },
+    "vibes": { "reel": "fiesta", "trailer": "cinematico", "film": "elegante" },
+    "grade": "teal-orange",
+    "captionTone": "familiar"
+  },
+  "quinceanera": {
+    "label": "Quinceañera",
+    "structure": "glam: entrada de protagonista, fiesta que brilla, cierre con presencia",
+    "pacing": { "hook": 4, "intro": 3, "build": 2, "party": 2, "close": 5 },
+    "thresholds": { "introEnd": 0.2, "buildEnd": 0.45 },
+    "effects": { "pulse": 0.9, "flash": 0.8, "motion": 1 },
+    "vibes": { "reel": "fiesta", "trailer": "fiesta", "film": "cinematico" },
+    "grade": "vibrant",
+    "captionTone": "brillante"
+  },
+  "party": {
+    "label": "Fiesta / Club",
+    "structure": "escalada: la energía SIEMPRE sube; sin cierre contemplativo — termina en el corte más rápido",
+    "pacing": { "hook": 3, "intro": 3, "build": 2, "party": 1, "close": 1 },
+    "thresholds": { "introEnd": 0.15, "buildEnd": 0.4 },
+    "effects": { "pulse": 1, "flash": 1, "motion": 1 },
+    "vibes": { "reel": "fiesta", "trailer": "fiesta", "film": "fiesta" },
+    "grade": "vibrant",
+    "captionTone": "directo"
+  },
+  "corporate": {
+    "label": "Corporativo",
+    "structure": "sobrio: ritmo constante, sin pirotecnia, cierre institucional",
+    "pacing": { "hook": 4, "intro": 3, "build": 3, "party": 2, "close": 5 },
+    "thresholds": { "introEnd": 0.25, "buildEnd": 0.55 },
+    "effects": { "pulse": 0.3, "flash": 0.2, "motion": 0.6 },
+    "vibes": { "reel": "cinematico", "trailer": "cinematico", "film": "cinematico" },
+    "grade": "teal-orange",
+    "captionTone": "sobrio"
+  },
+  "graduation": {
+    "label": "Graduación",
+    "structure": "logro: solemne al inicio, celebración creciente, cierre orgulloso",
+    "pacing": { "hook": 4, "intro": 3, "build": 2, "party": 2, "close": 5 },
+    "thresholds": { "introEnd": 0.3, "buildEnd": 0.55 },
+    "effects": { "pulse": 0.7, "flash": 0.5, "motion": 0.9 },
+    "vibes": { "reel": "cinematico", "trailer": "cinematico", "film": "cinematico" },
+    "grade": "teal-orange",
+    "captionTone": "orgulloso"
+  },
+  "babyshower": {
+    "label": "Baby Shower",
+    "structure": "tierno: todo respira, nada golpea, cierre suave y largo",
+    "pacing": { "hook": 5, "intro": 4, "build": 3, "party": 3, "close": 6 },
+    "thresholds": { "introEnd": 0.3, "buildEnd": 0.6 },
+    "effects": { "pulse": 0.3, "flash": 0.2, "motion": 0.6 },
+    "vibes": { "reel": "romantico", "trailer": "romantico", "film": "romantico" },
+    "grade": "warm-romance",
+    "captionTone": "tierno"
+  },
+  "other": {
+    "label": "Otro",
+    "structure": "equilibrado: el arco clásico",
+    "pacing": { "hook": 4, "intro": 4, "build": 3, "party": 2, "close": 6 },
+    "thresholds": { "introEnd": 0.22, "buildEnd": 0.45 },
+    "effects": { "pulse": 0.7, "flash": 0.6, "motion": 0.9 },
+    "vibes": { "reel": "fiesta", "trailer": "cinematico", "film": "romantico" },
+    "grade": "teal-orange",
+    "captionTone": "neutro"
+  }
+}

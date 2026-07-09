@@ -38,6 +38,8 @@ export const RemotionRoot = () => {
         clips: [],
         audioUrl: null,
         audioStartSec: 0,
+        effects: { pulse: 0.7, flash: 0.6, motion: 0.9 },
+        duckWindows: [],
         bpm: null,
         beatOffsetSec: 0,
         beats: [],

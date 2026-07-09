@@ -18,8 +18,14 @@ import {
   beatAlignClips,
   reelClipBudget,
   planAudioForDrop,
+  avgBeatsPerClip,
   type Track,
 } from "../lib/music";
+import { profileFor } from "../lib/profiles";
+
+// Perfil bajo prueba (REVIEW_PROFILE=party etc. para comparar tipos).
+const PROFILE_TYPE = process.env.REVIEW_PROFILE || "wedding";
+const profile = profileFor(PROFILE_TYPE);
 import { FPS, totalDurationInFrames, type ReelClip } from "../remotion/types";
 
 // ── REAL beat grid from the licensed library: the production path reads the
@@ -73,7 +79,7 @@ const shots: Shot[] = [
 // Presupuesto de clips según el tempo real (como producción): con 96 BPM caben
 // menos planos que con 128 para que el reel siga en 25–35s. Conservamos el
 // gancho (primero) y el plano de cierre (último).
-const budget = reelClipBudget(96, shots.length);
+const budget = reelClipBudget(96, shots.length, profile);
 const kept: Shot[] =
   budget >= shots.length
     ? shots
@@ -88,6 +94,9 @@ const rawClips: ReelClip[] = kept.map(([seed, label, o, fx, fy], i) => {
     kind: "photo" as const,
     label,
     durationInFrames: 1, // beatAlignClips decides, like production
+    section: "party" as const, // beatAlignClips lo reasigna por posición
+    startFromSec: 0,
+    liveAudio: false,
     focalX: fx,
     focalY: fy,
     sectionStart: false,
@@ -106,8 +115,7 @@ const track: Track = {
 
 // ── Drop planning, exactly like production: shift the audio so the track's
 // drop lands at the reel's climax, then force a cut there.
-const approxReelSec =
-  (kept.reduce((a) => a + 2.9, 0) * 60) / BPM; // arc ≈2.9 beats/clip
+const approxReelSec = (kept.length * avgBeatsPerClip(profile) * 60) / BPM;
 const { audioStartSec, dropAtSec } = planAudioForDrop(
   beatJson.dropSec ?? null,
   approxReelSec,
@@ -129,10 +137,30 @@ const { clips, dropClipIndex } = beatAlignClips(
   beats,
   downbeats,
   dropAtSec,
+  profile,
 );
 console.log(
   `[drop] hero slot: clip #${dropClipIndex} starts exactly on the drop cut`,
 );
+
+// Desglose por sección: qué efectos aplican dónde (dinámica, no efecto global).
+const SECTION_FX: Record<string, { pulse: number; flash: number; motion: number }> = {
+  hook: { pulse: 0.7, flash: 0.4, motion: 1 },
+  intro: { pulse: 0, flash: 0, motion: 0.5 },
+  build: { pulse: 0.35, flash: 0, motion: 0.7 },
+  drop: { pulse: 1, flash: 1, motion: 1 },
+  party: { pulse: 0.8, flash: 0.6, motion: 1 },
+  close: { pulse: 0, flash: 0, motion: 0.15 },
+};
+console.log(`\n[perfil "${PROFILE_TYPE}"] ${profile.structure}`);
+console.log("clip  sección  pulso  flash  motion  (efectivos = sección × perfil)");
+clips.forEach((c, i) => {
+  const fx = SECTION_FX[c.section];
+  console.log(
+    `${String(i).padStart(3)}   ${c.section.padEnd(6)}  ${(fx.pulse * profile.effects.pulse).toFixed(2)}   ${(fx.flash * profile.effects.flash).toFixed(2)}   ${(fx.motion * profile.effects.motion).toFixed(2)}`,
+  );
+});
+console.log("");
 
 // ── Structural verification: does every cut land on a measured beat? ──
 let cursor = 0;
@@ -162,6 +190,8 @@ const inputProps = {
   clips,
   audioUrl: null, // audio doesn't affect the frames we score
   audioStartSec,
+  effects: profile.effects,
+  duckWindows: [], // sin videos en el fixture → sólo música (fallback correcto)
   bpm: BPM,
   beatOffsetSec: OFFSET,
   beats,

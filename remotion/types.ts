@@ -5,12 +5,31 @@ import { z } from "zod";
 // El servidor arma los `clips` a partir del "mejor de" del evento.
 // ───────────────────────────────────────────────────────────────────────────
 
+export const sectionSchema = z.enum([
+  "hook",
+  "intro",
+  "build",
+  "drop",
+  "party",
+  "close",
+]);
+export type Section = z.infer<typeof sectionSchema>;
+
 export const reelClipSchema = z.object({
   id: z.string(),
   url: z.string(), // URL absoluta servible por el headless chrome del render
   kind: z.enum(["photo", "video"]),
   label: z.string().default(""), // etiqueta del momento (Ceremonia, Fiesta…)
   durationInFrames: z.number().int().positive(),
+  // Sección del arco a la que pertenece: los EFECTOS son por sección, nunca
+  // globales (el pulso vive en hook/drop/fiesta; el build deriva suave; el
+  // cierre se queda QUIETO). La asigna beatAlignClips según el perfil.
+  section: sectionSchema.default("party"),
+  // Audio real del invitado: el video arranca en este segundo de su archivo
+  // (para caer sobre el momento de audio) y, si liveAudio, su sonido respira
+  // por encima de la música (que se agacha en esa ventana).
+  startFromSec: z.number().min(0).default(0),
+  liveAudio: z.boolean().default(false),
   // Centro de interés (0..1) detectado por la IA (caras): el recorte a 9:16
   // encuadra hacia este punto en vez del centro geométrico. null → centro.
   focalX: z.number().min(0).max(1).nullable().default(null),
@@ -55,6 +74,20 @@ export const reelPropsSchema = z.object({
   downbeats: z.array(z.number()).default([]),
   // ── Look / colorización cinematográfica ──
   look: lookSchema.default("cinematic"),
+  // Intensidad de efectos del PERFIL del evento (multiplica la intensidad base
+  // de cada sección): una boda pulsa a 0.55; un club a 1; un baby shower a 0.3.
+  effects: z
+    .object({
+      pulse: z.number().min(0).max(1).default(0.7),
+      flash: z.number().min(0).max(1).default(0.6),
+      motion: z.number().min(0).max(1).default(0.9),
+    })
+    .default({ pulse: 0.7, flash: 0.6, motion: 0.9 }),
+  // Ventanas (en segundos del reel) donde la música se AGACHA para dejar
+  // respirar el audio real de un video de invitado. Rampas suaves de 0.5s.
+  duckWindows: z
+    .array(z.object({ fromSec: z.number(), toSec: z.number() }))
+    .default([]),
 });
 export type ReelProps = z.infer<typeof reelPropsSchema>;
 

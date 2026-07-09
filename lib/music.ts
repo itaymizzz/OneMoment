@@ -2,6 +2,11 @@ import fs from "fs";
 import path from "path";
 import type { ReelClip, ReelFormat } from "../remotion/types";
 import { FPS, secondsPerBeat } from "../remotion/types";
+import {
+  profileFor,
+  phaseForPosition,
+  type EditingProfile,
+} from "./profiles";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Biblioteca de música LICENCIADA + edición sincronizada al beat.
@@ -143,15 +148,28 @@ export function trackCredit(track: Track): string {
   return "Música: Kevin MacLeod (incompetech.com) · CC BY 4.0";
 }
 
-// Presupuesto de clips del REEL según el tempo de la pista: el arco consume
-// ~2.9 beats/clip de media, así que con una canción lenta hay que montar menos
-// planos para que el reel siga cayendo en los 25–35s del spec (a 128 BPM caben
-// ~20 clips; a 96, ~17; a 81, ~14).
-export function reelClipBudget(bpm: number, maxClips: number): number {
+// Beats/clip promedio del PERFIL (ponderado por el peso de cada fase): una
+// boda promedia ~2.8 beats/clip; un club ~1.6 — por eso el club necesita casi
+// el doble de planos para llenar los mismos ~30 s.
+export function avgBeatsPerClip(profile: EditingProfile): number {
+  const { pacing, thresholds } = profile;
+  return (
+    pacing.intro * thresholds.introEnd +
+    pacing.build * (thresholds.buildEnd - thresholds.introEnd) +
+    pacing.party * (1 - thresholds.buildEnd)
+  );
+}
+
+// Presupuesto de clips del REEL según tempo Y perfil, para que el reel caiga
+// en los 25–35s del spec sea cual sea el ritmo del tipo de evento.
+export function reelClipBudget(
+  bpm: number,
+  maxClips: number,
+  profile: EditingProfile = profileFor("other"),
+): number {
   const TARGET_SEC = 30;
-  const AVG_BEATS_PER_CLIP = 2.9;
   const spb = secondsPerBeat(bpm);
-  const clips = Math.round(TARGET_SEC / spb / AVG_BEATS_PER_CLIP);
+  const clips = Math.round(TARGET_SEC / spb / avgBeatsPerClip(profile));
   return Math.max(10, Math.min(maxClips, clips));
 }
 
@@ -240,53 +258,35 @@ export async function loadTrackBeats(track: Track): Promise<TrackBeats | null> {
   return out;
 }
 
-// Beats base de una FOTO según su posición en el reel: un arco, no un ritmo
-// plano. Gancho sostenido → intro que respira → subida que se acelera → drop y
-// fiesta con cortes rápidos → plano de cierre largo y calmado. Esto es lo que
-// diferencia una edición profesional de un pase de diapositivas.
-function basePhotoBeats(energy: Energy, index: number, total: number): number {
-  const p = total > 1 ? index / (total - 1) : 0;
-  const isHook = index === 0;
-  const isLast = index === total - 1;
-  if (energy === "upbeat") {
-    if (isHook) return 4; // gancho: se sostiene ~2s
-    if (isLast) return 6; // cierre: plano largo
-    if (p < 0.22) return 4; // intro
-    if (p < 0.45) return 3; // subida (acelerando)
-    return 2; // drop + fiesta: cortes rápidos al beat
-  }
-  if (energy === "warm") {
-    if (isHook) return 5;
-    if (isLast) return 8;
-    if (p < 0.25) return 5;
-    if (p < 0.5) return 4;
-    return 3;
-  }
-  // calm (película): más contemplativo
-  if (isHook) return 6;
-  if (isLast) return 10;
-  if (p < 0.3) return 6;
-  if (p < 0.6) return 5;
-  return 4;
+// Beats base de una FOTO según su posición en el reel: un arco definido por el
+// PERFIL DE EDICIÓN del tipo de evento (lib/editing-profiles.json) — una boda
+// respira lento con cierre largo; una noche de club acelera hasta el final.
+function basePhotoBeats(
+  profile: EditingProfile,
+  index: number,
+  total: number,
+): number {
+  const phase = phaseForPosition(index, total, profile.thresholds);
+  return profile.pacing[phase];
 }
 
-// Cuántos beats dura cada clip según energía, posición y tipo. Los videos ocupan
+// Cuántos beats dura cada clip según perfil, posición y tipo. Los videos ocupan
 // más beats (para que se aprecie el movimiento), acotados por su propia duración.
 function beatsForClip(
-  energy: Energy,
+  profile: EditingProfile,
   clip: ReelClip,
   spb: number,
   index: number,
   total: number,
 ): number {
   const isVideo = clip.kind === "video";
-  const basePhoto = basePhotoBeats(energy, index, total);
+  const basePhoto = basePhotoBeats(profile, index, total);
   if (!isVideo) return basePhoto;
 
   const videoSecs = clip.durationInFrames / FPS;
   const wanted = Math.round(videoSecs / spb); // beats que caben en el video
   const minV = basePhoto + 2;
-  const maxV = energy === "upbeat" ? 8 : energy === "warm" ? 10 : 12;
+  const maxV = Math.max(8, profile.pacing.close + 4);
   return Math.max(minV, Math.min(maxV, wanted || minV));
 }
 
@@ -325,27 +325,33 @@ export function beatAlignClips(
   // Instante del drop en TIEMPO DEL REEL: se fuerza un corte exactamente ahí
   // y se devuelve qué clip arranca en ese corte (para poner al héroe).
   dropAtSec: number | null = null,
+  // Perfil de edición del tipo de evento (ritmo por fase + estructura).
+  profile: EditingProfile = profileFor("other"),
 ): { clips: ReelClip[]; dropClipIndex: number | null } {
   const spb = secondsPerBeat(track.bpm);
   const framesPerBeat = spb * FPS;
   const total = clips.length;
 
-  // Metadatos de sección + beats objetivo por clip (el arco), comunes a ambos caminos.
+  // Metadatos de sección + beats objetivo por clip (el arco), comunes a ambos
+  // caminos. Cada clip lleva su FASE: los efectos del render son por sección
+  // (el pulso del drop no existe en el cierre — dinámica, no efecto global).
   let prevLabel: string | null = null;
   const plan = clips.map((c, i) => {
-    const beats = beatsForClip(track.energy, c, spb, i, total);
+    const beats = beatsForClip(profile, c, spb, i, total);
     const sectionStart = prevLabel !== null && c.label !== prevLabel;
     prevLabel = c.label;
-    return { clip: c, beats, sectionStart };
+    const section: ReelClip["section"] = phaseForPosition(i, total, profile.thresholds);
+    return { clip: c, beats, sectionStart, section };
   });
 
   // ── Camino de rejilla constante (sin beats medidos) ──
   if (measuredBeats.length < 8) {
     return {
-      clips: plan.map(({ clip, beats, sectionStart }) => ({
+      clips: plan.map(({ clip, beats, sectionStart, section }) => ({
         ...clip,
         durationInFrames: Math.max(1, Math.round(beats * framesPerBeat)),
         sectionStart,
+        section,
       })),
       dropClipIndex: null,
     };
@@ -375,7 +381,7 @@ export function beatAlignClips(
   let cutIdx = 0; // índice en `grid` del corte anterior (el reel arranca en t=0)
   let prevFrame = 0;
   let dropClipIndex: number | null = null;
-  const aligned = plan.map(({ clip, beats, sectionStart }, i) => {
+  const aligned: ReelClip[] = plan.map(({ clip, beats, sectionStart, section }, i) => {
     let k = cutIdx + beats;
     // Drop: si este corte pasaría cerca del beat del drop, lo CLAVAMOS ahí —
     // el clip siguiente (el héroe) entra exactamente cuando la música cae.
@@ -404,7 +410,11 @@ export function beatAlignClips(
     const durationInFrames = Math.max(1, cutFrame - prevFrame);
     cutIdx = k;
     prevFrame = cutFrame;
-    return { ...clip, durationInFrames, sectionStart };
+    return { ...clip, durationInFrames, sectionStart, section };
   });
+  // El clip del drop lleva su propia sección (pulso máximo, flash, motion).
+  if (dropClipIndex != null && aligned[dropClipIndex]) {
+    aligned[dropClipIndex] = { ...aligned[dropClipIndex], section: "drop" };
+  }
   return { clips: aligned, dropClipIndex };
 }

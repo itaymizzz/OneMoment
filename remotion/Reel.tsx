@@ -8,10 +8,25 @@ import {
   Audio,
 } from "remotion";
 import { Video } from "@remotion/media";
-import type { Look } from "./types";
+import type { Look, Section } from "./types";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { buildTimeline, FPS, Segment, ReelProps } from "./types";
+
+// ── Efectos POR SECCIÓN (nunca globales) ────────────────────────────────────
+// La regla de dinámica: el silencio entre efectos es lo que hace que los
+// efectos aterricen. El gancho y el drop pulsan con el beat; el build deriva
+// suave (sin pulso); el cierre se queda QUIETO. Estas intensidades base se
+// multiplican por el perfil del evento (props.effects) — una boda a 0.55, un
+// club a 1, un baby shower casi quieto.
+const SECTION_FX: Record<Section, { pulse: number; flash: number; motion: number }> = {
+  hook: { pulse: 0.7, flash: 0.4, motion: 1 },
+  intro: { pulse: 0, flash: 0, motion: 0.5 },
+  build: { pulse: 0.35, flash: 0, motion: 0.7 },
+  drop: { pulse: 1, flash: 1, motion: 1 },
+  party: { pulse: 0.8, flash: 0.6, motion: 1 },
+  close: { pulse: 0, flash: 0, motion: 0.15 },
+};
 
 // "La Première" dentro de la película: oro antiguo (nunca gradiente), negro
 // cálido de sala, marfil. Serif (Georgia ≈ voz display) + mono para metadatos
@@ -37,7 +52,11 @@ function beatPulse(
   offsetSec: number,
   beats: number[],
   downbeats: number[],
+  // Intensidades efectivas de la sección (0 = quieto total, sin cálculo).
+  pulseAmp: number,
+  flashAmp: number,
 ): { scale: number; flash: number } {
+  if (pulseAmp <= 0 && flashAmp <= 0) return { scale: 1, flash: 0 };
   // Camino de beats reales.
   if (beats.length > 1 && tGlobal >= beats[0]) {
     // Búsqueda binaria del beat anterior a tGlobal.
@@ -59,8 +78,11 @@ function beatPulse(
     const phase = Math.min(1, (tGlobal - beatT) / interval);
     const isDown = downbeats.includes(beatT);
     const pulse = Math.exp(-phase * 6);
-    const amp = isDown ? 0.045 : 0.02;
-    return { scale: 1 + amp * pulse, flash: isDown ? 0.08 * pulse : 0 };
+    const amp = (isDown ? 0.045 : 0.02) * pulseAmp;
+    return {
+      scale: 1 + amp * pulse,
+      flash: isDown ? 0.08 * pulse * flashAmp : 0,
+    };
   }
 
   // Fallback: rejilla de BPM constante.
@@ -72,8 +94,11 @@ function beatPulse(
   const phase = beatPos - Math.floor(beatPos); // 0..1 dentro del beat
   const isDown = Math.floor(beatPos) % 4 === 0;
   const pulse = Math.exp(-phase * 6); // golpe fuerte que decae
-  const amp = isDown ? 0.04 : 0.02;
-  return { scale: 1 + amp * pulse, flash: isDown ? 0.07 * pulse : 0 };
+  const amp = (isDown ? 0.04 : 0.02) * pulseAmp;
+  return {
+    scale: 1 + amp * pulse,
+    flash: isDown ? 0.07 * pulse * flashAmp : 0,
+  };
 }
 
 // ── Colorización / look cinematográfico ─────────────────────────────────────
@@ -141,7 +166,9 @@ const MOTIONS: Motion[] = [
   "panDown",
 ];
 
-function motionStyle(kind: Motion, frame: number, d: number) {
+// `m` (0..1) escala el movimiento: 1 = Ken Burns completo; 0.15 = casi quieto
+// (el cierre respira, no viaja); 0 = foto estática.
+function motionStyle(kind: Motion, frame: number, d: number, m: number) {
   const ease = Easing.bezier(0.25, 0.1, 0.25, 1);
   const p = (a: number, b: number) =>
     interpolate(frame, [0, d], [a, b], {
@@ -149,23 +176,26 @@ function motionStyle(kind: Motion, frame: number, d: number) {
       extrapolateRight: "clamp",
       easing: ease,
     });
+  // Reduce un factor de escala hacia 1 y una traslación hacia 0.
+  const zs = (v: number) => 1 + (v - 1) * m;
+  const zt = (v: number) => v * m;
   switch (kind) {
     case "zoomIn":
-      return { scale: String(p(1.04, 1.17)), translate: "0% 0%" };
+      return { scale: String(zs(p(1.04, 1.17))), translate: "0% 0%" };
     case "zoomOut":
-      return { scale: String(p(1.17, 1.04)), translate: "0% 0%" };
+      return { scale: String(zs(p(1.17, 1.04))), translate: "0% 0%" };
     case "panLeft":
-      return { scale: "1.14", translate: `${p(2.5, -2.5)}% 0%` };
+      return { scale: String(zs(1.14)), translate: `${zt(p(2.5, -2.5))}% 0%` };
     case "panRight":
-      return { scale: "1.14", translate: `${p(-2.5, 2.5)}% 0%` };
+      return { scale: String(zs(1.14)), translate: `${zt(p(-2.5, 2.5))}% 0%` };
     case "panUp":
-      return { scale: "1.14", translate: `0% ${p(2.5, -2.5)}%` };
+      return { scale: String(zs(1.14)), translate: `0% ${zt(p(2.5, -2.5))}%` };
     case "panDown":
-      return { scale: "1.14", translate: `0% ${p(-2.5, 2.5)}%` };
+      return { scale: String(zs(1.14)), translate: `0% ${zt(p(-2.5, 2.5))}%` };
     case "diagonal":
       return {
-        scale: String(p(1.06, 1.16)),
-        translate: `${p(1.8, -1.8)}% ${p(1.6, -1.6)}%`,
+        scale: String(zs(p(1.06, 1.16))),
+        translate: `${zt(p(1.8, -1.8))}% ${zt(p(1.6, -1.6))}%`,
       };
   }
 }
@@ -186,6 +216,7 @@ function MotionPhoto({
   look,
   focalX,
   focalY,
+  motionAmp,
 }: {
   url: string;
   durationInFrames: number;
@@ -193,9 +224,10 @@ function MotionPhoto({
   look: Look;
   focalX: number | null;
   focalY: number | null;
+  motionAmp: number;
 }) {
   const frame = useCurrentFrame();
-  const s = motionStyle(motion, frame, durationInFrames);
+  const s = motionStyle(motion, frame, durationInFrames, motionAmp);
   return (
     <AbsoluteFill style={{ overflow: "hidden", backgroundColor: BG }}>
       <Img
@@ -228,6 +260,7 @@ function ClipFrame({
   beats,
   downbeats,
   startFrame,
+  profileFx,
   title,
   subtitle,
   dateLabel,
@@ -240,6 +273,7 @@ function ClipFrame({
   beats: number[];
   downbeats: number[];
   startFrame: number; // frame de inicio del clip DENTRO del reel (audio continuo)
+  profileFx: { pulse: number; flash: number; motion: number };
   // Sólo en el clip "gancho" (el primero): el título se superpone aquí en vez de
   // ocupar una tarjeta a pantalla completa antes del reel.
   title?: string;
@@ -249,6 +283,13 @@ function ClipFrame({
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { clip } = segment;
+
+  // Dinámica por sección × perfil: el pulso NO es global. El build deriva sin
+  // pulso; el cierre está quieto; el drop pega con todo lo que el perfil deje.
+  const fx = SECTION_FX[clip.section];
+  const pulseAmp = fx.pulse * profileFx.pulse;
+  const flashAmp = fx.flash * profileFx.flash;
+  const motionAmp = fx.motion * profileFx.motion;
 
   const labelOpacity = interpolate(frame, [3, 12], [0, 1], {
     extrapolateLeft: "clamp",
@@ -267,7 +308,20 @@ function ClipFrame({
     beatOffsetSec,
     beats,
     downbeats,
+    pulseAmp,
+    flashAmp,
   );
+
+  // Audio real del invitado: fundido suave de entrada/salida dentro del clip
+  // (0.4s) hasta 0.9 — nunca un salto ni un susto.
+  const liveVol = clip.liveAudio
+    ? interpolate(
+        frame,
+        [0, 12, segment.durationInFrames - 12, segment.durationInFrames],
+        [0, 0.9, 0.9, 0],
+        { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+      )
+    : 0;
 
   return (
     <AbsoluteFill style={{ backgroundColor: BG }}>
@@ -276,7 +330,8 @@ function ClipFrame({
         {clip.kind === "video" ? (
           <Video
             src={clip.url}
-            volume={0}
+            volume={clip.liveAudio ? () => liveVol : 0}
+            trimBefore={Math.round(clip.startFromSec * fps)}
             style={{
               width: "100%",
               height: "100%",
@@ -293,6 +348,7 @@ function ClipFrame({
             look={look}
             focalX={clip.focalX}
             focalY={clip.focalY}
+            motionAmp={motionAmp}
           />
         )}
       </AbsoluteFill>
@@ -579,6 +635,7 @@ export function Reel(props: ReelProps) {
           beats={props.beats}
           downbeats={props.downbeats}
           startFrame={startFrames[i]}
+          profileFx={props.effects}
           title={isHook ? props.title : undefined}
           subtitle={isHook ? props.subtitle : undefined}
           dateLabel={isHook ? props.dateLabel : undefined}
@@ -593,13 +650,31 @@ export function Reel(props: ReelProps) {
     );
   });
 
+  // La música se AGACHA (duck) en las ventanas de audio real: baja a ~25% con
+  // rampas de 0.5s — el momento del invitado respira, la música nunca muere.
+  const duckVolume = (f: number): number => {
+    const t = f / FPS;
+    let factor = 1;
+    for (const w of props.duckWindows) {
+      const RAMP = 0.5;
+      const inWin = interpolate(
+        t,
+        [w.fromSec - RAMP, w.fromSec, w.toSec, w.toSec + RAMP],
+        [1, 0.25, 0.25, 1],
+        { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+      );
+      factor = Math.min(factor, inWin);
+    }
+    return 0.85 * factor;
+  };
+
   return (
     <AbsoluteFill style={{ backgroundColor: BG }}>
       {props.audioUrl ? (
         <Audio
           src={props.audioUrl}
           loop
-          volume={0.85}
+          volume={props.duckWindows.length > 0 ? duckVolume : 0.85}
           startFrom={Math.round(props.audioStartSec * FPS)}
         />
       ) : null}
