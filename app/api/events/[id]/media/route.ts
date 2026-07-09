@@ -41,6 +41,8 @@ function extFor(file: File): string {
 }
 
 // Lista los medios de un evento (para refresco en vivo de la galería).
+// Con ?guest=<token>: SOLO las subidas de ese invitado ("mis fotos") — el
+// token vale únicamente dentro de su propio evento.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -51,6 +53,24 @@ export async function GET(
   if (!rateLimit(`medialist:${clientIp(req)}`, 120, 60 * 1000)) {
     return NextResponse.json({ error: "Demasiadas peticiones" }, { status: 429 });
   }
+
+  const guestToken = new URL(req.url).searchParams.get("guest");
+  if (guestToken) {
+    const guest = await prisma.guest.findFirst({
+      where: { token: guestToken, eventId: id },
+      select: { id: true },
+    });
+    if (!guest) {
+      return NextResponse.json({ error: "Invitado no válido" }, { status: 403 });
+    }
+    const media = await prisma.mediaItem.findMany({
+      where: { eventId: id, guestId: guest.id },
+      orderBy: { createdAt: "desc" },
+      include: { guest: { select: { name: true } } },
+    });
+    return NextResponse.json({ media });
+  }
+
   const media = await prisma.mediaItem.findMany({
     where: { eventId: id },
     orderBy: { createdAt: "asc" },
@@ -79,12 +99,23 @@ export async function POST(
     return NextResponse.json({ error: "Formato inválido" }, { status: 400 });
   }
 
-  // Verificamos que el invitado pertenezca a este evento.
+  // Identidad del invitado. Camino preferente: su token secreto (guestToken),
+  // que sólo existe dentro de este evento — un token del evento A jamás
+  // resuelve en el evento B. Respaldo legado: guestId a secas, aceptado ÚNICO
+  // para invitados creados antes del sistema de tokens (token null); para los
+  // que ya tienen token, el id sin token no basta (evita suplantación barata).
+  const rawToken = form.get("guestToken");
   const rawGuest = form.get("guestId");
   let guestId: string | null = null;
-  if (typeof rawGuest === "string" && rawGuest) {
+  if (typeof rawToken === "string" && rawToken) {
     const guest = await prisma.guest.findFirst({
-      where: { id: rawGuest, eventId: id },
+      where: { token: rawToken, eventId: id },
+      select: { id: true },
+    });
+    guestId = guest?.id ?? null;
+  } else if (typeof rawGuest === "string" && rawGuest) {
+    const guest = await prisma.guest.findFirst({
+      where: { id: rawGuest, eventId: id, token: null },
       select: { id: true },
     });
     guestId = guest?.id ?? null;

@@ -6,6 +6,7 @@ import {
   ImageIcon,
   CheckIcon,
   PlayIcon,
+  TrashIcon,
 } from "@/app/components/icons";
 import {
   putPending,
@@ -14,7 +15,59 @@ import {
   type PendingUpload,
 } from "./upload-queue";
 
-type Phase = "name" | "ready";
+type Phase = "name" | "claim" | "ready";
+
+// Identidad invisible del invitado en este dispositivo: id + nombre + token
+// secreto. Vive en localStorage y, de respaldo, en una cookie de 90 días —
+// si el navegador limpia una, la otra la recupera.
+type Identity = { guestId: string; name: string; token: string | null };
+
+const COOKIE_DAYS = 90;
+
+function cookieName(eventId: string) {
+  return `om_g_${eventId}`;
+}
+
+function saveIdentity(eventId: string, id: Identity) {
+  try {
+    localStorage.setItem(`om_guest_${eventId}`, JSON.stringify(id));
+  } catch {
+    /* modo privado */
+  }
+  if (id.token) {
+    try {
+      document.cookie = `${cookieName(eventId)}=${id.token}; max-age=${
+        COOKIE_DAYS * 86400
+      }; path=/; SameSite=Lax`;
+    } catch {
+      /* noop */
+    }
+  }
+}
+
+function clearIdentity(eventId: string) {
+  try {
+    localStorage.removeItem(`om_guest_${eventId}`);
+  } catch {
+    /* noop */
+  }
+  try {
+    document.cookie = `${cookieName(eventId)}=; max-age=0; path=/`;
+  } catch {
+    /* noop */
+  }
+}
+
+function readCookieToken(eventId: string): string | null {
+  try {
+    const m = document.cookie.match(
+      new RegExp(`(?:^|; )${cookieName(eventId)}=([^;]+)`),
+    );
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
 
 // "pending" = en cola (sin conexión o esperando reintento); "uploading" = subiendo
 // ahora; "error" = agotó los reintentos (el invitado puede tocar para reintentar).
@@ -28,6 +81,13 @@ type Item = {
   progress: number; // 0..100
   status: Status;
   file: Blob; // el archivo (o Blob rehidratado de IndexedDB) para poder reintentar.
+};
+
+// Una subida propia confirmada por el servidor (pestaña "Mis fotos").
+type MineItem = {
+  id: string;
+  kind: "photo" | "video";
+  createdAt: string;
 };
 
 // Reintentos con espera creciente: en un salón con WiFi saturado un fallo suele
@@ -64,15 +124,18 @@ function readVideoMeta(
 // Sube un solo archivo con XHR para poder mostrar progreso real de subida.
 // `file` puede ser un File (sesión actual) o un Blob rehidratado de IndexedDB
 // (al reanudar tras recargar); por eso pasamos también nombre y tipo.
+// La identidad viaja como token secreto (guestToken); guestId queda de
+// respaldo para identidades legadas sin token.
 async function uploadOne(
   eventId: string,
-  guestId: string,
+  identity: Identity,
   file: Blob,
   fileName: string,
   onProgress: (pct: number) => void,
 ): Promise<boolean> {
   const fd = new FormData();
-  fd.append("guestId", guestId);
+  if (identity.token) fd.append("guestToken", identity.token);
+  else fd.append("guestId", identity.guestId);
   fd.append("files", file, fileName);
   if (file.type.startsWith("video/")) {
     const m = await readVideoMeta(file);
@@ -104,51 +167,103 @@ export default function Uploader({
 }) {
   const [phase, setPhase] = useState<Phase>("name");
   const [name, setName] = useState("");
-  const [guestId, setGuestId] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<Identity | null>(null);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
+  // "Mis fotos": las subidas confirmadas de ESTE invitado, según el servidor.
+  const [mine, setMine] = useState<MineItem[]>([]);
+  const [showMine, setShowMine] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   // Espejos en ref para que los listeners async (resume, online) vean siempre el
   // valor más reciente sin cerrar sobre un estado viejo.
-  const guestIdRef = useRef<string | null>(null);
+  const identityRef = useRef<Identity | null>(null);
   const itemsRef = useRef<Item[]>([]);
   const resumedRef = useRef(false);
   useEffect(() => {
-    guestIdRef.current = guestId;
-  }, [guestId]);
+    identityRef.current = identity;
+  }, [identity]);
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
-  // Recordamos al invitado en este dispositivo para que no escriba el nombre cada vez.
+  // Reconocemos al invitado que vuelve: localStorage primero; si el navegador
+  // lo limpió pero queda la cookie del token (90 días), rehidratamos del
+  // servidor. Async para no disparar renders en cascada (regla de React).
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`om_guest_${eventId}`);
-      if (raw) {
-        const saved = JSON.parse(raw) as { guestId: string; name: string };
-        if (saved?.guestId) {
-          setGuestId(saved.guestId);
-          setName(saved.name ?? "");
+    let alive = true;
+    (async () => {
+      try {
+        const raw = localStorage.getItem(`om_guest_${eventId}`);
+        if (raw) {
+          const saved = JSON.parse(raw) as Partial<Identity>;
+          if (saved?.guestId && alive) {
+            setIdentity({
+              guestId: saved.guestId,
+              name: saved.name ?? "",
+              token: saved.token ?? null,
+            });
+            setName(saved.name ?? "");
+            setPhase("ready");
+            return;
+          }
+        }
+      } catch {
+        /* localStorage no disponible */
+      }
+      const cookieToken = readCookieToken(eventId);
+      if (!cookieToken) return;
+      try {
+        const res = await fetch(
+          `/api/events/${eventId}/guests?token=${encodeURIComponent(cookieToken)}`,
+        );
+        if (!res.ok || !alive) return;
+        const g = (await res.json()) as { guestId: string; name: string };
+        const id: Identity = { guestId: g.guestId, name: g.name, token: cookieToken };
+        saveIdentity(eventId, id);
+        if (alive) {
+          setIdentity(id);
+          setName(g.name);
           setPhase("ready");
         }
+      } catch {
+        /* sin red: que escriba su nombre */
       }
-    } catch {
-      /* noop */
-    }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [eventId]);
+
+  // "Mis fotos": al entrar (y tras cada subida completada) refrescamos la
+  // lista de contribuciones propias desde el servidor.
+  const doneCountAll = items.filter((i) => i.status === "done").length;
+  useEffect(() => {
+    const token = identityRef.current?.token;
+    if (phase !== "ready" || !token) return;
+    let alive = true;
+    fetch(`/api/events/${eventId}/media?guest=${encodeURIComponent(token)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d?.media) setMine(d.media as MineItem[]);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [phase, eventId, doneCountAll]);
 
   // Al cargar (p. ej. tras recargar a mitad del evento) reanudamos las subidas
   // que quedaron pendientes en IndexedDB para este invitado. Se ejecuta una vez.
   useEffect(() => {
-    if (phase !== "ready" || !guestId || resumedRef.current) return;
+    if (phase !== "ready" || !identity || resumedRef.current) return;
     resumedRef.current = true;
     (async () => {
       const pending = await listPending(eventId);
       const known = new Set(itemsRef.current.map((i) => i.id));
       const restored: Item[] = pending
-        .filter((p: PendingUpload) => p.guestId === guestId && !known.has(p.id))
+        .filter((p: PendingUpload) => p.guestId === identity.guestId && !known.has(p.id))
         .map((p: PendingUpload) => ({
           id: p.id,
           name: p.fileName,
@@ -165,7 +280,7 @@ export default function Uploader({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, guestId, eventId]);
+  }, [phase, identity, eventId]);
 
   // Al recuperar la conexión, reintentamos lo que quedó en cola o con error.
   useEffect(() => {
@@ -180,9 +295,11 @@ export default function Uploader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // `asAnon` = "continuar sin nombre": entra como "Invitado" sin escribir nada.
-  async function join(asAnon = false) {
-    const clean = asAnon ? "Invitado" : name.trim();
+  // Unirse. `opts.asAnon` = "continuar sin nombre" (entra como "Invitado");
+  // `opts.claim` = "sí, soy la misma persona" (reusa la identidad existente);
+  // `opts.forceNew` = "no, soy otra persona" (crea identidad aparte).
+  async function join(opts: { asAnon?: boolean; claim?: boolean; forceNew?: boolean } = {}) {
+    const clean = opts.asAnon ? "Invitado" : name.trim();
     if (!clean || joining) return;
     setJoining(true);
     setJoinError(null);
@@ -190,15 +307,31 @@ export default function Uploader({
       const res = await fetch(`/api/events/${eventId}/guests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: clean }),
+        body: JSON.stringify({
+          name: clean,
+          ...(opts.claim ? { claim: true } : {}),
+          ...(opts.forceNew ? { forceNew: true } : {}),
+        }),
       });
       if (!res.ok) throw new Error("join failed");
-      const data = (await res.json()) as { guestId: string; name: string };
-      setGuestId(data.guestId);
-      localStorage.setItem(
-        `om_guest_${eventId}`,
-        JSON.stringify({ guestId: data.guestId, name: data.name }),
-      );
+      const data = (await res.json()) as
+        | { guestId: string; name: string; token: string | null }
+        | { existing: true; name: string };
+      if ("existing" in data) {
+        // Hay otro invitado con este nombre: ¿es la misma persona en un
+        // dispositivo nuevo? Que decida.
+        setName(data.name);
+        setPhase("claim");
+        return;
+      }
+      const id: Identity = {
+        guestId: data.guestId,
+        name: data.name,
+        token: data.token ?? null,
+      };
+      saveIdentity(eventId, id);
+      setIdentity(id);
+      setName(data.name);
       setPhase("ready");
     } catch {
       setJoinError("No se pudo unir al evento. Revisa tu conexión e inténtalo de nuevo.");
@@ -209,16 +342,30 @@ export default function Uploader({
 
   // Vuelve a la pantalla de nombre (por si otra persona usa el mismo teléfono).
   function changeName() {
-    try {
-      localStorage.removeItem(`om_guest_${eventId}`);
-    } catch {
-      /* noop */
-    }
-    setGuestId(null);
+    clearIdentity(eventId);
+    setIdentity(null);
     setName("");
     setItems([]);
+    setMine([]);
+    setShowMine(false);
     resumedRef.current = false; // el próximo invitado puede reanudar lo suyo
     setPhase("name");
+  }
+
+  // Borra una subida propia (sólo con el token de este invitado).
+  async function deleteMine(m: MineItem) {
+    const token = identityRef.current?.token;
+    if (!token) return;
+    if (!window.confirm("¿Borrar esta foto/video del evento? No se puede deshacer.")) return;
+    setMine((prev) => prev.filter((x) => x.id !== m.id));
+    try {
+      await fetch(`/api/media/${m.id}`, {
+        method: "DELETE",
+        headers: { "x-guest-token": token },
+      });
+    } catch {
+      /* si falló, el próximo refresco la repone */
+    }
   }
 
   const patch = (id: string, p: Partial<Item>) =>
@@ -228,8 +375,8 @@ export default function Uploader({
   // que termina con éxito, para que sobreviva a una recarga. Si no hay conexión,
   // lo deja "pending"; el listener de `online` lo reanudará.
   async function runUpload(itemId: string, file: Blob, fileName: string) {
-    const gid = guestIdRef.current;
-    if (!gid) return false;
+    const who = identityRef.current;
+    if (!who) return false;
 
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       patch(itemId, { status: "pending", progress: 0 });
@@ -238,7 +385,7 @@ export default function Uploader({
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       patch(itemId, { status: "uploading", progress: 0 });
-      const ok = await uploadOne(eventId, gid, file, fileName, (pct) =>
+      const ok = await uploadOne(eventId, who, file, fileName, (pct) =>
         patch(itemId, { progress: pct }),
       );
       if (ok) {
@@ -263,8 +410,8 @@ export default function Uploader({
   }
 
   async function onFiles(fileList: FileList | null) {
-    const gid = guestIdRef.current;
-    if (!fileList || !gid) return;
+    const who = identityRef.current;
+    if (!fileList || !who) return;
     const files = Array.from(fileList);
 
     // Creamos las tarjetas optimistas con preview local.
@@ -287,7 +434,7 @@ export default function Uploader({
       await putPending({
         id: it.id,
         eventId,
-        guestId: gid,
+        guestId: who.guestId,
         fileName: f.name,
         type: f.type,
         isVideo: it.isVideo,
@@ -300,6 +447,44 @@ export default function Uploader({
     for (const item of newItems) {
       await runUpload(item.id, item.file, item.name);
     }
+  }
+
+  if (phase === "claim") {
+    // Hay un invitado con el mismo nombre en este evento: ¿misma persona
+    // en un dispositivo nuevo, u otra persona que se llama igual?
+    return (
+      <div className="card mt-8 p-6 text-center">
+        <p className="text-lg font-medium">
+          ¿Eres {name ? `la misma persona: ${name}` : "tú"}?
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Ya hay alguien con ese nombre en este evento. Si eres tú desde otro
+          teléfono o navegador, tus fotos se juntan en un solo lugar.
+        </p>
+        <div className="mt-5 grid gap-2">
+          <button
+            onClick={() => join({ claim: true })}
+            disabled={joining}
+            className="btn-primary w-full cursor-pointer py-3 text-sm"
+          >
+            Sí, soy {name || "yo"} — recuperar mis fotos
+          </button>
+          <button
+            onClick={() => join({ forceNew: true })}
+            disabled={joining}
+            className="w-full cursor-pointer rounded-xl border border-border py-3 text-sm transition-colors hover:border-accent"
+          >
+            No, soy otra persona con el mismo nombre
+          </button>
+          <button
+            onClick={() => setPhase("name")}
+            className="mt-1 text-xs text-muted underline underline-offset-2 hover:text-foreground"
+          >
+            Volver
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (phase === "name") {
@@ -337,7 +522,7 @@ export default function Uploader({
           {joining ? "Uniéndote…" : `Unirme a ${eventName}`}
         </button>
         <button
-          onClick={() => join(true)}
+          onClick={() => join({ asAnon: true })}
           disabled={joining}
           className="mx-auto mt-3 block text-center text-xs text-muted underline underline-offset-2 hover:text-foreground"
         >
@@ -484,6 +669,59 @@ export default function Uploader({
               )}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* "Mis fotos": todas las contribuciones confirmadas de este invitado,
+          también las de sesiones anteriores. Puede borrar las suyas. */}
+      {identity?.token && mine.length > 0 && (
+        <div className="mt-6">
+          <button
+            onClick={() => setShowMine((s) => !s)}
+            className="mx-auto flex cursor-pointer items-center gap-1.5 text-sm font-medium text-foreground/90 hover:text-foreground"
+            aria-expanded={showMine}
+          >
+            Mis fotos ({mine.length}) {showMine ? "▴" : "▾"}
+          </button>
+          {showMine && (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {mine.map((m) => (
+                <div
+                  key={m.id}
+                  className="relative aspect-square overflow-hidden rounded-lg border border-border"
+                >
+                  {m.kind === "video" ? (
+                    <video
+                      src={`/api/media/${m.id}`}
+                      className="h-full w-full object-cover"
+                      muted
+                      playsInline
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/media/${m.id}`}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  {m.kind === "video" && (
+                    <span className="absolute left-1 top-1 rounded bg-black/55 p-1 text-white">
+                      <PlayIcon width={12} height={12} />
+                    </span>
+                  )}
+                  <button
+                    onClick={() => deleteMine(m)}
+                    aria-label="Borrar esta foto"
+                    className="absolute right-1 top-1 cursor-pointer rounded bg-black/60 p-1 text-white backdrop-blur hover:bg-red-600"
+                  >
+                    <TrashIcon width={13} height={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

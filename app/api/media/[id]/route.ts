@@ -88,7 +88,10 @@ export async function PATCH(
 
 // Borrado DEFINITIVO de una pieza: archivo (y variantes IA) fuera del disco y
 // fila fuera de la base. "Ocultar" no basta para una foto inapropiada en una
-// boda — esto la elimina de verdad. Sólo el dueño del evento.
+// boda — esto la elimina de verdad. Pueden borrarla:
+//   · el dueño del evento (cualquier pieza), o
+//   · el propio invitado que la subió (header x-guest-token) — sus fotos son
+//     suyas; el token de otro evento u otro invitado no vale.
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -96,10 +99,21 @@ export async function DELETE(
   const { id } = await params;
   const item = await prisma.mediaItem.findUnique({
     where: { id },
-    select: { eventId: true, filename: true },
+    select: {
+      eventId: true,
+      filename: true,
+      guest: { select: { token: true, eventId: true } },
+    },
   });
   if (!item) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-  if (!(await requestIsOwner(req, item.eventId))) {
+
+  const guestToken = req.headers.get("x-guest-token");
+  const isUploader =
+    !!guestToken &&
+    !!item.guest?.token &&
+    item.guest.token === guestToken &&
+    item.guest.eventId === item.eventId;
+  if (!isUploader && !(await requestIsOwner(req, item.eventId))) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
 
