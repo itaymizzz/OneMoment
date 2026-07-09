@@ -35,11 +35,16 @@ export async function sendEmail(opts: {
   }
 }
 
+// Plantilla "La Première" en versión email-safe: estilos inline, serif del
+// sistema (Georgia ≈ la voz display), mono para los metadatos, oro antiguo
+// como único acento. Sin webfonts ni imágenes: llega igual a Gmail y Outlook.
 const wrap = (inner: string) => `
-  <div style="font-family:Georgia,serif;background:#0b0a08;color:#f5f5f7;padding:40px 24px;text-align:center">
-    <p style="letter-spacing:6px;font-size:12px;color:#e8b04b;text-transform:uppercase;margin:0">OneMoment</p>
-    ${inner}
-    <p style="margin-top:36px;font-size:12px;color:#8a8578">Una película hecha por todos</p>
+  <div style="background:#0b0a08;padding:36px 16px;text-align:center">
+    <div style="max-width:520px;margin:0 auto;background:#14120e;border:1px solid #262219;border-radius:6px;padding:40px 28px;font-family:Georgia,'Times New Roman',serif;color:#f2ede3">
+      <p style="font-family:'Courier New',monospace;letter-spacing:5px;font-size:11px;color:#9c948a;text-transform:uppercase;margin:0">OneMoment presenta</p>
+      ${inner}
+    </div>
+    <p style="font-family:'Courier New',monospace;letter-spacing:3px;font-size:10px;color:#9c948a;text-transform:uppercase;margin-top:24px">Una película hecha por todos</p>
   </div>`;
 
 const FORMAT_ES: Record<string, string> = {
@@ -54,9 +59,9 @@ export function reelReadyEmail(eventName: string, format: string, panelUrl: stri
   return {
     subject: `🎬 Tu ${f} de "${eventName}" está lista`,
     html: wrap(`
-      <h1 style="font-weight:300;font-size:28px;margin:24px 0 8px">Tu ${f} está lista</h1>
-      <p style="color:#c9c4b8;font-size:15px;line-height:1.6">La IA terminó de montar el ${f} de <strong>${eventName}</strong> con lo mejor que subieron tus invitados.</p>
-      <a href="${panelUrl}" style="display:inline-block;margin-top:20px;background:#e8b04b;color:#0b0a08;text-decoration:none;font-weight:600;padding:12px 28px;border-radius:8px">Verla y descargarla</a>`),
+      <h1 style="font-weight:400;font-size:30px;margin:24px 0 8px">Tu ${f} está lista</h1>
+      <p style="color:#9c948a;font-size:15px;line-height:1.6">La IA terminó de montar el ${f} de <strong>${eventName}</strong> con lo mejor que subieron tus invitados.</p>
+      <a href="${panelUrl}" style="display:inline-block;margin-top:20px;background:#c6a15b;color:#16120a;text-decoration:none;font-weight:600;padding:13px 30px;border-radius:4px">Verla y descargarla</a>`),
   };
 }
 
@@ -72,18 +77,18 @@ export function magicLinkEmail(
       ? `Tu evento "${eventName}" está listo — entra a tu panel`
       : "Tu enlace de acceso a OneMoment",
     html: wrap(`
-      <h1 style="font-weight:300;font-size:28px;margin:24px 0 8px">${
+      <h1 style="font-weight:400;font-size:30px;margin:24px 0 8px">${
         eventName ? "Tu evento está creado" : "Entra a OneMoment"
       }</h1>
       ${
         eventName
-          ? `<p style="color:#c9c4b8;font-size:15px;line-height:1.6"><strong>${eventName}</strong> ya tiene su QR y su galería. Entra con un clic — sin contraseña:</p>`
-          : `<p style="color:#c9c4b8;font-size:15px;line-height:1.6">Toca el botón para entrar. El enlace vale 15 minutos y se usa una sola vez.</p>`
+          ? `<p style="color:#9c948a;font-size:15px;line-height:1.6"><strong>${eventName}</strong> ya tiene su QR y su galería. Entra con un clic — sin contraseña:</p>`
+          : `<p style="color:#9c948a;font-size:15px;line-height:1.6">Toca el botón para entrar. El enlace vale 15 minutos y se usa una sola vez.</p>`
       }
-      <a href="${url}" style="display:inline-block;margin-top:20px;background:#e8b04b;color:#0b0a08;text-decoration:none;font-weight:600;padding:12px 28px;border-radius:8px">Entrar a mi panel</a>
+      <a href="${url}" style="display:inline-block;margin-top:20px;background:#c6a15b;color:#16120a;text-decoration:none;font-weight:600;padding:13px 30px;border-radius:4px">Entrar a mi panel</a>
       ${
         fallbackUrl
-          ? `<p style="margin-top:28px;font-size:13px;color:#8a8578">¿El enlace caducó? Guarda este acceso directo permanente a tu evento:<br/><a href="${fallbackUrl}" style="color:#e8b04b;word-break:break-all">${fallbackUrl}</a></p>`
+          ? `<p style="margin-top:28px;font-size:13px;color:#9c948a">¿El enlace caducó? Guarda este acceso directo permanente a tu evento:<br/><a href="${fallbackUrl}" style="color:#c6a15b;word-break:break-all">${fallbackUrl}</a></p>`
           : ""
       }`),
   };
@@ -94,9 +99,9 @@ export function resetPasswordEmail(url: string) {
   return {
     subject: "Restablece tu contraseña de OneMoment",
     html: wrap(`
-      <h1 style="font-weight:300;font-size:28px;margin:24px 0 8px">¿Nueva contraseña?</h1>
-      <p style="color:#c9c4b8;font-size:15px;line-height:1.6">Toca el botón para elegir una contraseña nueva. Si no lo pediste tú, ignora este correo — tu cuenta sigue segura.</p>
-      <a href="${url}" style="display:inline-block;margin-top:20px;background:#e8b04b;color:#0b0a08;text-decoration:none;font-weight:600;padding:12px 28px;border-radius:8px">Elegir contraseña nueva</a>`),
+      <h1 style="font-weight:400;font-size:30px;margin:24px 0 8px">¿Nueva contraseña?</h1>
+      <p style="color:#9c948a;font-size:15px;line-height:1.6">Toca el botón para elegir una contraseña nueva. Si no lo pediste tú, ignora este correo — tu cuenta sigue segura.</p>
+      <a href="${url}" style="display:inline-block;margin-top:20px;background:#c6a15b;color:#16120a;text-decoration:none;font-weight:600;padding:13px 30px;border-radius:4px">Elegir contraseña nueva</a>`),
   };
 }
 
@@ -106,8 +111,8 @@ export function reelFailedEmail(eventName: string, format: string, panelUrl: str
   return {
     subject: `El ${f} de "${eventName}" necesita otro intento`,
     html: wrap(`
-      <h1 style="font-weight:300;font-size:28px;margin:24px 0 8px">Casi…</h1>
-      <p style="color:#c9c4b8;font-size:15px;line-height:1.6">El montaje del ${f} de <strong>${eventName}</strong> falló a mitad (suele ser un pico de memoria del servidor). Tus fotos y videos están a salvo: no se perdió nada.</p>
-      <a href="${panelUrl}" style="display:inline-block;margin-top:20px;background:#e8b04b;color:#0b0a08;text-decoration:none;font-weight:600;padding:12px 28px;border-radius:8px">Reintentar desde el panel</a>`),
+      <h1 style="font-weight:400;font-size:30px;margin:24px 0 8px">Casi…</h1>
+      <p style="color:#9c948a;font-size:15px;line-height:1.6">El montaje del ${f} de <strong>${eventName}</strong> falló a mitad (suele ser un pico de memoria del servidor). Tus fotos y videos están a salvo: no se perdió nada.</p>
+      <a href="${panelUrl}" style="display:inline-block;margin-top:20px;background:#c6a15b;color:#16120a;text-decoration:none;font-weight:600;padding:13px 30px;border-radius:4px">Reintentar desde el panel</a>`),
   };
 }

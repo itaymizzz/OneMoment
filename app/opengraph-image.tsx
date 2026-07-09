@@ -21,8 +21,8 @@ export default function OpengraphImage() {
           justifyContent: "center",
           alignItems: "center",
           background:
-            "radial-gradient(60% 55% at 50% 40%, #2a1330 0%, #0b0b0f 60%)",
-          color: "#fff",
+            "radial-gradient(60% 55% at 50% 40%, rgba(198,161,91,0.14) 0%, #0b0a08 65%)",
+          color: "#f2ede3",
           padding: 80,
           textAlign: "center",
           fontFamily: "serif",
@@ -32,7 +32,7 @@ export default function OpengraphImage() {
           style={{
             fontSize: 30,
             letterSpacing: 12,
-            color: "#e8b04b",
+            color: "#c6a15b",
             textTransform: "uppercase",
           }}
         >
@@ -40,29 +40,28 @@ export default function OpengraphImage() {
         </div>
         <div
           style={{
-            width: 260,
-            height: 3,
+            width: 200,
+            height: 1,
             margin: "36px 0",
-            background: "linear-gradient(90deg, #e8b04b, #d65db1)",
+            background: "rgba(242,237,227,0.25)",
           }}
         />
-        <div style={{ display: "flex", fontSize: 68, fontWeight: 700, lineHeight: 1.1 }}>
+        <div style={{ display: "flex", fontSize: 68, fontWeight: 500, lineHeight: 1.1 }}>
           Tus invitados capturan.
         </div>
         <div
           style={{
             display: "flex",
             fontSize: 68,
-            fontWeight: 700,
+            fontWeight: 500,
             lineHeight: 1.1,
-            background: "linear-gradient(90deg, #e8b04b, #d65db1)",
-            backgroundClip: "text",
-            color: "transparent",
+            color: "#c6a15b",
+            fontStyle: "italic",
           }}
         >
           La IA crea la película.
         </div>
-        <div style={{ marginTop: 40, fontSize: 30, color: "rgba(245,245,247,0.7)" }}>
+        <div style={{ marginTop: 40, fontSize: 28, color: "#9c948a" }}>
           Fotos y videos por QR · sin instalar apps · calidad original
         </div>
       </div>
