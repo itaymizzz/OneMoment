@@ -15,6 +15,12 @@ import { ownerCookieName, tokenMatches } from "@/lib/owner";
 
 export const dynamic = "force-dynamic";
 
+// Panel privado del organizador: fuera de los buscadores.
+export const metadata = {
+  title: "Panel del evento",
+  robots: { index: false, follow: false },
+};
+
 export default async function EventDashboard({
   params,
   searchParams,

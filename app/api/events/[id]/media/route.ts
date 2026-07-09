@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { customAlphabet } from "nanoid";
 import { prisma } from "@/lib/db";
-import { saveBuffer } from "@/lib/storage";
+import { saveBuffer, eventDirSize } from "@/lib/storage";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 // Tope de archivos por petición: evita que una sola subida meta miles de
 // archivos y llene el volumen (la app y la base viven en el mismo disco).
 const MAX_FILES_PER_REQUEST = 40;
+
+// Tope TOTAL de almacenamiento por evento (disco compartido con la app y la
+// base): generoso para una boda real (miles de fotos + cientos de videos),
+// imposible de reventar por un bot. Configurable con EVENT_STORAGE_CAP_GB.
+const CAP_GB = Number(process.env.EVENT_STORAGE_CAP_GB) || 25;
+const EVENT_CAP_BYTES = CAP_GB * 1024 * 1024 * 1024;
 
 // Nombre de archivo en disco (sin caracteres del nombre original del usuario).
 const fileId = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 16);
@@ -36,10 +42,15 @@ function extFor(file: File): string {
 
 // Lista los medios de un evento (para refresco en vivo de la galería).
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  // El muro y la galería sondean cada ~4s (15/min por pantalla): 120/min por IP
+  // deja margen de sobra y corta el scraping/martilleo.
+  if (!rateLimit(`medialist:${clientIp(req)}`, 120, 60 * 1000)) {
+    return NextResponse.json({ error: "Demasiadas peticiones" }, { status: 429 });
+  }
   const media = await prisma.mediaItem.findMany({
     where: { eventId: id },
     orderBy: { createdAt: "asc" },
@@ -95,6 +106,20 @@ export async function POST(
   const metaDurationS = num("durationS");
   const metaWidth = num("width");
   const metaHeight = num("height");
+
+  // Tope total por evento: si ya está lleno, rechazamos ANTES de tocar disco.
+  // Contamos lo que ocupa + lo que viene en esta petición.
+  const used = await eventDirSize(id);
+  const incoming = files.reduce((a, f) => a + f.size, 0);
+  if (used + incoming > EVENT_CAP_BYTES) {
+    return NextResponse.json(
+      {
+        error:
+          "El evento alcanzó su límite de almacenamiento. Avisa al organizador.",
+      },
+      { status: 413 },
+    );
+  }
 
   const ids: string[] = [];
   const skipped: string[] = [];

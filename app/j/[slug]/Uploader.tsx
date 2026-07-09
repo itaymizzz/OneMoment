@@ -180,8 +180,9 @@ export default function Uploader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function join() {
-    const clean = name.trim();
+  // `asAnon` = "continuar sin nombre": entra como "Invitado" sin escribir nada.
+  async function join(asAnon = false) {
+    const clean = asAnon ? "Invitado" : name.trim();
     if (!clean || joining) return;
     setJoining(true);
     setJoinError(null);
@@ -329,11 +330,18 @@ export default function Uploader({
           </p>
         )}
         <button
-          onClick={join}
+          onClick={() => join()}
           disabled={!name.trim() || joining}
           className="btn-primary mt-4 w-full py-3 text-base"
         >
           {joining ? "Uniéndote…" : `Unirme a ${eventName}`}
+        </button>
+        <button
+          onClick={() => join(true)}
+          disabled={joining}
+          className="mx-auto mt-3 block text-center text-xs text-muted underline underline-offset-2 hover:text-foreground"
+        >
+          Continuar sin nombre
         </button>
       </div>
     );

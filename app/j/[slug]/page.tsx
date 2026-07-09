@@ -4,6 +4,12 @@ import Uploader from "./Uploader";
 
 export const dynamic = "force-dynamic";
 
+// Página privada-por-enlace: no debe salir en buscadores.
+export const metadata = {
+  title: "Sube tus fotos",
+  robots: { index: false, follow: false },
+};
+
 // Página pública a la que llega el invitado por QR/link: /j/<slug>
 export default async function JoinPage({
   params,

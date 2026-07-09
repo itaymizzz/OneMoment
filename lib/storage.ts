@@ -34,6 +34,33 @@ export async function readMedia(
   return fs.readFile(mediaPath(eventId, filename));
 }
 
+// Bytes ocupados por un evento (medios + variantes + reels). Recorre el
+// directorio en disco: la verdad está ahí, no en la base.
+export async function eventDirSize(eventId: string): Promise<number> {
+  const walk = async (dir: string): Promise<number> => {
+    let total = 0;
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return 0; // el evento aún no tiene carpeta
+    }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) total += await walk(p);
+      else {
+        try {
+          total += (await fs.stat(p)).size;
+        } catch {
+          /* archivo borrado a mitad del recorrido */
+        }
+      }
+    }
+    return total;
+  };
+  return walk(path.join(STORAGE_ROOT, eventId));
+}
+
 // Borra un archivo de medio y sus variantes generadas (enh-/venh-). Silencioso
 // si alguna variante no existe: borrar debe ser idempotente.
 export async function deleteMediaFiles(

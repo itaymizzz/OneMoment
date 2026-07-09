@@ -44,7 +44,6 @@ export const metadata: Metadata = {
     "fotos de fiesta QR",
   ],
   applicationName: "OneMoment",
-  alternates: { canonical: SITE },
   openGraph: {
     type: "website",
     locale: "es_ES",
