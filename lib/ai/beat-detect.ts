@@ -40,7 +40,7 @@ const MAX_SECONDS = 90; // analizamos hasta 90 s: de sobra para fijar el tempo
 const FRAME_RATE = SAMPLE_RATE / HOP; // ~43.07 envolventes/seg
 
 // Decodifica el audio a Float32 mono con FFmpeg (cualquier build sirve).
-function decodePcm(absAudioPath: string): Promise<Float32Array | null> {
+export function decodePcm(absAudioPath: string): Promise<Float32Array | null> {
   const bin = ffmpegWith([]); // no hacen falta filtros especiales para decodificar
   if (!bin) return Promise.resolve(null);
   return new Promise((resolve) => {
@@ -74,7 +74,7 @@ function decodePcm(absAudioPath: string): Promise<Float32Array | null> {
 }
 
 // FFT iterativa radix-2 in-place (entrada real → re/im). O(N log N).
-function fft(re: Float32Array, im: Float32Array): void {
+export function fft(re: Float32Array, im: Float32Array): void {
   const n = re.length;
   // bit-reversal
   for (let i = 1, j = 0; i < n; i++) {

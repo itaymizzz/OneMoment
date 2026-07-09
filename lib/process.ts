@@ -1,10 +1,11 @@
 import sharp from "sharp";
 import { prisma } from "./db";
-import { readMedia } from "./storage";
+import { readMedia, mediaPath } from "./storage";
 import { MOMENTS, MOMENT_LABEL } from "./types";
 import { ai } from "./ai/config";
 import { curatePhoto } from "./ai/curate";
 import { analyzeAesthetics } from "./ai/aesthetics";
+import { analyzeAudioMoments } from "./ai/audio-moments";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Capa de IA "simple" (sin modelos pesados): puntúa calidad, detecta borrosas y
@@ -119,6 +120,23 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
     include: { guest: { select: { name: true } } },
   });
   if (items.length === 0) return { scored: 0 };
+
+  // Alma sonora: momentos de audio real de cada VIDEO (risas, vítores, voces),
+  // medidos UNA vez en local (gratis) y cacheados en la fila. El montaje los
+  // usa para dejar respirar el audio del invitado bajo la música.
+  for (const it of items) {
+    if (it.kind !== "video" || it.audioMoments != null) continue;
+    try {
+      const moments = await analyzeAudioMoments(mediaPath(eventId, it.filename));
+      await prisma.mediaItem.update({
+        where: { id: it.id },
+        data: { audioMoments: JSON.stringify(moments) },
+      });
+      it.audioMoments = JSON.stringify(moments);
+    } catch {
+      /* sin momentos: el reel será sólo música para este video */
+    }
+  }
 
   let newlyScored = 0;
   const work: Work[] = [];
