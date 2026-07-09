@@ -62,22 +62,37 @@ export const metadata: Metadata = {
   },
 };
 
-// Datos estructurados (JSON-LD) para SEO: identifica la marca y el producto.
+// Datos estructurados (JSON-LD) para SEO: la marca (Organization) y el
+// producto (SoftwareApplication), en un solo bloque con @graph.
 const orgJsonLd = {
   "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "OneMoment",
-  applicationCategory: "MultimediaApplication",
-  operatingSystem: "Web",
-  url: SITE,
-  description:
-    "App para eventos: los invitados suben fotos y videos por QR y la IA crea el reel, el tráiler y la película del evento.",
-  offers: {
-    "@type": "Offer",
-    price: "0",
-    priceCurrency: "USD",
-    description: "Gratis durante la beta",
-  },
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE}/#organization`,
+      name: "OneMoment",
+      url: SITE,
+      logo: `${SITE}/opengraph-image`,
+      description:
+        "OneMoment convierte las fotos y videos de tus invitados en la película de tu evento, montada por IA.",
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "OneMoment",
+      applicationCategory: "MultimediaApplication",
+      operatingSystem: "Web",
+      url: SITE,
+      publisher: { "@id": `${SITE}/#organization` },
+      description:
+        "App para eventos: los invitados suben fotos y videos por QR y la IA crea el reel, el tráiler y la película del evento.",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+        description: "Gratis durante la beta",
+      },
+    },
+  ],
 };
 
 export const viewport: Viewport = {

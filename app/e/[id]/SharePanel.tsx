@@ -6,6 +6,7 @@ import {
   CheckIcon,
   ShareIcon,
   DownloadIcon,
+  WhatsAppIcon,
 } from "@/app/components/icons";
 
 export default function SharePanel({
@@ -75,7 +76,20 @@ export default function SharePanel({
         {joinUrl}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      {/* WhatsApp con mensaje prellenado: funciona también en escritorio
+          (WhatsApp Web), donde navigator.share no existe. */}
+      <a
+        href={`https://wa.me/?text=${encodeURIComponent(
+          `¡Sube tus fotos y videos de ${eventName}! 📸 Escanea el QR o entra aquí (sin instalar nada): ${joinUrl}`,
+        )}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#25D366] py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+      >
+        <WhatsAppIcon width={16} height={16} /> Compartir por WhatsApp
+      </a>
+
+      <div className="mt-2 grid grid-cols-2 gap-2">
         <button
           onClick={copy}
           className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm transition-colors hover:border-accent"

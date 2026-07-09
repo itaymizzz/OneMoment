@@ -45,6 +45,14 @@ const FAQ = [
     a: "Bodas, cumpleaños, eventos corporativos, graduaciones y fiestas: cualquier momento donde muchas personas graban a la vez desde ángulos distintos.",
   },
   {
+    q: "¿Y si el WiFi del salón es malo o se corta?",
+    a: "No se pierde nada. Si se corta la señal a mitad de una subida, las fotos quedan guardadas en el teléfono del invitado y se suben solas cuando vuelve la conexión — incluso si cerró el navegador. Nadie tiene que volver a intentarlo a mano.",
+  },
+  {
+    q: "¿Cuánto tiempo se guardan las fotos y videos?",
+    a: "Tu galería no desaparece al terminar la fiesta: sigue disponible después del evento para que descargues los originales y la película con calma. Durante la beta no borramos nada automáticamente; si algún día aplicamos un límite de retención, avisaremos con tiempo de sobra.",
+  },
+  {
     q: "¿Cuánto cuesta?",
     a: "Gratis durante la beta. Después será un pago único por evento —sin suscripción—, en la línea de lo que cobra el mercado.",
   },
