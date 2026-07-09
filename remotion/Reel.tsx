@@ -527,9 +527,11 @@ function TitleOverlay({
 function OutroCard({
   dateLabel,
   musicCredit,
+  qrDataUrl,
 }: {
   dateLabel: string;
   musicCredit: string;
+  qrDataUrl: string;
 }) {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, 16], [0, 1], { extrapolateRight: "clamp" });
@@ -594,6 +596,25 @@ function OutroCard({
             {musicCredit}
           </div>
         ) : null}
+        {/* Demo: QR al sitio — el gancho viral vive en el final del video. */}
+        {qrDataUrl ? (
+          <div style={{ marginTop: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+            <div style={{ background: "#fff", padding: 12, borderRadius: 8 }}>
+              <Img src={qrDataUrl} style={{ width: 170, height: 170, display: "block" }} />
+            </div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 18,
+                letterSpacing: 4,
+                textTransform: "uppercase",
+                color: "rgba(242,237,227,0.6)",
+              }}
+            >
+              Crea la de tu evento
+            </div>
+          </div>
+        ) : null}
       </div>
     </AbsoluteFill>
   );
@@ -621,7 +642,11 @@ export function Reel(props: ReelProps) {
     let content: React.ReactNode;
     if (seg.kind === "outro") {
       content = (
-        <OutroCard dateLabel={props.dateLabel} musicCredit={props.musicCredit} />
+        <OutroCard
+          dateLabel={props.dateLabel}
+          musicCredit={props.musicCredit}
+          qrDataUrl={props.outroQrDataUrl}
+        />
       );
     } else {
       const isHook = clipIndex === 0;
@@ -679,6 +704,30 @@ export function Reel(props: ReelProps) {
         />
       ) : null}
       <TransitionSeries>{children}</TransitionSeries>
+      {/* Marca DEMO: discreta, mono, arriba a la derecha (zona segura). */}
+      {props.watermark ? (
+        <AbsoluteFill
+          style={{
+            justifyContent: "flex-start",
+            alignItems: "flex-end",
+            padding: "64px 48px",
+            pointerEvents: "none",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 20,
+              letterSpacing: 4,
+              textTransform: "uppercase",
+              color: "rgba(242,237,227,0.5)",
+              textShadow: "0 1px 10px rgba(0,0,0,0.6)",
+            }}
+          >
+            OneMoment
+          </span>
+        </AbsoluteFill>
+      ) : null}
     </AbsoluteFill>
   );
 }

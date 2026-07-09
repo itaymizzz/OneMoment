@@ -56,6 +56,9 @@ export const reelPropsSchema = z.object({
   dateLabel: z.string().default(""),
   // Crédito de la música (obligatorio con pistas CC BY); "" = no se muestra.
   musicCredit: z.string().default(""),
+  // Plan DEMO: marca discreta durante el video + QR en el outro (gancho viral).
+  watermark: z.boolean().default(false),
+  outroQrDataUrl: z.string().default(""),
   audioUrl: z.string().nullable().default(null),
   // La pista arranca desde este segundo (para que su drop caiga en el clímax
   // del reel). Los beats/downbeats de abajo ya vienen desplazados acorde.

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import QRCode from "qrcode";
 import path from "path";
 import { prisma } from "@/lib/db";
 import { requestIsOwner } from "@/lib/owner";
@@ -102,6 +103,7 @@ export async function POST(
       date: true,
       ownerToken: true,
       ownerEmail: true,
+      plan: true,
     },
   });
   if (!event) {
@@ -460,6 +462,13 @@ export async function POST(
     subtitle: event.hostName ? `Organiza ${event.hostName}` : "",
     dateLabel,
     musicCredit: trackCredit(track),
+    // Plan demo: marca discreta + QR al sitio en el outro. Los paquetes de
+    // pago y los eventos anteriores (plan null) van SIN marca.
+    watermark: event.plan === "demo",
+    outroQrDataUrl:
+      event.plan === "demo"
+        ? await QRCode.toDataURL(baseUrl(), { margin: 0, width: 340 })
+        : "",
     clips: alignedClips,
     audioUrl: `${baseUrl()}${track.file}`,
     audioStartSec,

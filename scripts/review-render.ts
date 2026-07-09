@@ -192,6 +192,8 @@ const inputProps = {
   audioStartSec,
   effects: profile.effects,
   duckWindows: [], // sin videos en el fixture → sólo música (fallback correcto)
+  watermark: process.env.REVIEW_DEMO === "1",
+  outroQrDataUrl: "", // se rellena async abajo si REVIEW_DEMO=1
   bpm: BPM,
   beatOffsetSec: OFFSET,
   beats,
@@ -203,6 +205,12 @@ const frames = totalDurationInFrames(inputProps as never);
 console.log(`\n[cfg] ${clips.length} photos, ${frames} frames = ${(frames / FPS).toFixed(1)}s (target 25–35s)`);
 
 async function main() {
+  if (process.env.REVIEW_DEMO === "1") {
+    // Simula el plan DEMO: marca discreta + QR "crea la de tu evento" al final.
+    const QRCode = (await import("qrcode")).default;
+    (inputProps as { outroQrDataUrl: string }).outroQrDataUrl =
+      await QRCode.toDataURL("https://onemoment.app", { margin: 0, width: 340 });
+  }
   console.log("[1/4] ensureBrowser…");
   await ensureBrowser();
   console.log("[2/4] bundle…");
