@@ -453,26 +453,26 @@ export default function Uploader({
     // Hay un invitado con el mismo nombre en este evento: ¿misma persona
     // en un dispositivo nuevo, u otra persona que se llama igual?
     return (
-      <div className="card mt-8 p-6 text-center">
-        <p className="text-lg font-medium">
+      <div className="mt-10 rounded-md border border-hairline bg-card/50 p-6 text-center">
+        <p className="font-display text-2xl font-light leading-snug">
           ¿Eres {name ? `la misma persona: ${name}` : "tú"}?
         </p>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-3 text-sm leading-relaxed text-muted">
           Ya hay alguien con ese nombre en este evento. Si eres tú desde otro
           teléfono o navegador, tus fotos se juntan en un solo lugar.
         </p>
-        <div className="mt-5 grid gap-2">
+        <div className="mt-6 grid gap-2.5">
           <button
             onClick={() => join({ claim: true })}
             disabled={joining}
-            className="btn-primary w-full cursor-pointer py-3 text-sm"
+            className="btn-primary w-full cursor-pointer py-4 text-base"
           >
             Sí, soy {name || "yo"} — recuperar mis fotos
           </button>
           <button
             onClick={() => join({ forceNew: true })}
             disabled={joining}
-            className="w-full cursor-pointer rounded-xl border border-border py-3 text-sm transition-colors hover:border-accent"
+            className="w-full cursor-pointer rounded-md border border-hairline py-4 text-base transition-colors hover:border-accent"
           >
             No, soy otra persona con el mismo nombre
           </button>
@@ -489,11 +489,11 @@ export default function Uploader({
 
   if (phase === "name") {
     return (
-      <div className="card mt-8 p-6">
-        <label htmlFor="guest-name" className="block text-sm font-medium">
+      <div className="mt-10 rounded-md border border-hairline bg-card/50 p-6">
+        <label htmlFor="guest-name" className="eyebrow block">
           ¿Cómo te llamas?
         </label>
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-2 text-sm text-muted">
           Así sabemos de quién es cada momento.
         </p>
         <input
@@ -507,7 +507,7 @@ export default function Uploader({
           onKeyDown={(e) => e.key === "Enter" && join()}
           placeholder="Tu nombre"
           maxLength={60}
-          className="mt-3 w-full px-4 py-3 text-base"
+          className="mt-4 w-full px-4 py-3.5 text-base"
         />
         {joinError && (
           <p role="alert" className="mt-2 text-sm text-red-400">
@@ -517,14 +517,14 @@ export default function Uploader({
         <button
           onClick={() => join()}
           disabled={!name.trim() || joining}
-          className="btn-primary mt-4 w-full py-3 text-base"
+          className="btn-primary mt-4 w-full py-4 text-base"
         >
           {joining ? "Uniéndote…" : `Unirme a ${eventName}`}
         </button>
         <button
           onClick={() => join({ asAnon: true })}
           disabled={joining}
-          className="mx-auto mt-3 block text-center text-xs text-muted underline underline-offset-2 hover:text-foreground"
+          className="mx-auto mt-4 block text-center text-xs text-muted underline underline-offset-2 hover:text-foreground"
         >
           Continuar sin nombre
         </button>
@@ -541,23 +541,26 @@ export default function Uploader({
 
   return (
     <div className="mt-8">
-      <div className="card p-5 text-center">
-        <p className="text-sm text-muted">
-          ¡Hola{name ? `, ${name}` : ""}! Captura el momento 👇
+      <div className="rounded-md border border-hairline bg-card/50 p-5 text-center">
+        <p className="eyebrow">Hola{name ? ` · ${name}` : ""}</p>
+        <p className="font-display mt-2 text-2xl font-light">
+          Captura el momento
         </p>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        {/* Botones grandes: para usarse a oscuras, con una mano y una copa
+            en la otra. Nada de objetivos pequeños. */}
+        <div className="mt-5 grid grid-cols-2 gap-3">
           <button
             onClick={() => cameraRef.current?.click()}
-            className="btn-primary flex cursor-pointer items-center justify-center gap-2 py-4 text-base"
+            className="btn-primary flex min-h-16 cursor-pointer items-center justify-center gap-2.5 py-4 text-base"
           >
-            <CameraIcon width={20} height={20} /> Cámara
+            <CameraIcon width={22} height={22} /> Cámara
           </button>
           <button
             onClick={() => libraryRef.current?.click()}
-            className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-[#0e0e14] py-4 text-base font-semibold transition-colors hover:border-accent"
+            className="flex min-h-16 cursor-pointer items-center justify-center gap-2.5 rounded-md border border-hairline bg-card py-4 text-base font-medium transition-colors hover:border-accent"
           >
-            <ImageIcon width={20} height={20} /> Galería
+            <ImageIcon width={22} height={22} /> Galería
           </button>
         </div>
 
@@ -586,25 +589,28 @@ export default function Uploader({
           }}
         />
 
-        {/* Estado de las subidas: en cola/en curso, listas y con error. */}
-        <div aria-live="polite" className="mt-3 min-h-[1rem] text-xs">
+        {/* Estado de las subidas: legible de un vistazo, en un salón oscuro. */}
+        <div aria-live="polite" className="mt-4 min-h-[1.25rem] text-sm">
           {offline && inFlight > 0 && (
-            <p className="text-amber-400">
-              Sin conexión — {inFlight} en cola. Se subirán solas al volver la señal.
+            <p className="font-medium text-accent">
+              Sin conexión — {inFlight} en cola. Se subirán solas al volver la
+              señal.
             </p>
           )}
           {!offline && inFlight > 0 && (
             <p className="text-muted">
-              Subiendo {inFlight}…{pendingCount > 0 ? ` (${pendingCount} en cola)` : ""}
+              Subiendo {inFlight}…
+              {pendingCount > 0 ? ` (${pendingCount} en cola)` : ""}
             </p>
           )}
           {inFlight === 0 && doneCount > 0 && (
-            <p className="font-medium text-accent">
-              {doneCount} {doneCount === 1 ? "recuerdo subido" : "recuerdos subidos"} ✓
+            <p className="inline-flex items-center gap-1.5 font-medium text-accent">
+              <CheckIcon width={15} height={15} strokeWidth={3} />
+              {doneCount} {doneCount === 1 ? "recuerdo subido" : "recuerdos subidos"}
             </p>
           )}
           {inFlight === 0 && errorCount > 0 && (
-            <p className="text-red-400">
+            <p className="font-medium text-red-400">
               {errorCount} sin subir — toca para reintentar.
             </p>
           )}
@@ -622,7 +628,7 @@ export default function Uploader({
                 (it.status === "error" || it.status === "pending") &&
                 runUpload(it.id, it.file, it.name)
               }
-              className={`relative aspect-square overflow-hidden rounded-lg border border-border ${
+              className={`relative aspect-square overflow-hidden rounded-md border border-hairline ${
                 it.status === "error" || it.status === "pending"
                   ? "cursor-pointer"
                   : "cursor-default"
@@ -653,7 +659,7 @@ export default function Uploader({
                 </div>
               )}
               {it.status === "pending" && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-[10px] font-medium text-white/90">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/45 font-mono text-[9px] uppercase tracking-widest text-white/90">
                   En cola
                 </div>
               )}
@@ -663,7 +669,7 @@ export default function Uploader({
                 </span>
               )}
               {it.status === "error" && (
-                <span className="absolute inset-x-0 bottom-0 bg-red-500/90 py-0.5 text-[10px] font-semibold text-white">
+                <span className="absolute inset-x-0 bottom-0 bg-red-500/90 py-1 font-mono text-[9px] uppercase tracking-widest text-white">
                   Reintentar
                 </span>
               )}
@@ -678,17 +684,17 @@ export default function Uploader({
         <div className="mt-6">
           <button
             onClick={() => setShowMine((s) => !s)}
-            className="mx-auto flex cursor-pointer items-center gap-1.5 text-sm font-medium text-foreground/90 hover:text-foreground"
+            className="eyebrow mx-auto flex cursor-pointer items-center gap-2 py-2 hover:text-foreground"
             aria-expanded={showMine}
           >
-            Mis fotos ({mine.length}) {showMine ? "▴" : "▾"}
+            Mis fotos · {mine.length} {showMine ? "▴" : "▾"}
           </button>
           {showMine && (
             <div className="mt-3 grid grid-cols-3 gap-2">
               {mine.map((m) => (
                 <div
                   key={m.id}
-                  className="relative aspect-square overflow-hidden rounded-lg border border-border"
+                  className="relative aspect-square overflow-hidden rounded-md border border-hairline"
                 >
                   {m.kind === "video" ? (
                     <video

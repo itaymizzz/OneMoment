@@ -24,25 +24,25 @@ export default async function JoinPage({
   if (!event) notFound();
 
   return (
-    <main className="stage-bg min-h-dvh">
-      <div className="mx-auto flex max-w-md flex-col px-5 py-8">
+    <main className="guest-page min-h-dvh">
+      <div className="mx-auto flex max-w-md flex-col px-5 py-10">
         <header className="text-center">
-          <p className="text-xs uppercase tracking-widest text-muted">OneMoment</p>
-          <h1 className="font-display mt-2 text-3xl font-semibold leading-tight">
+          <p className="eyebrow">OneMoment presenta</p>
+          <h1 className="font-display mt-3 text-4xl font-light leading-tight">
             {event.name}
           </h1>
           {event.hostName && (
-            <p className="mt-1 text-sm text-muted">Organiza {event.hostName}</p>
+            <p className="eyebrow mt-3">Organiza {event.hostName}</p>
           )}
-          <p className="mt-4 text-sm text-muted">
+          <p className="mt-5 text-[15px] leading-relaxed text-muted">
             Sube tus fotos y videos del evento. La IA se encarga del resto.
           </p>
         </header>
 
         <Uploader eventId={event.id} eventName={event.name} />
 
-        <p className="mt-8 text-center text-xs text-muted">
-          {event._count.media} momentos capturados hasta ahora
+        <p className="eyebrow mt-10 text-center">
+          {event._count.media} momentos capturados
         </p>
       </div>
     </main>

@@ -87,6 +87,12 @@ body {
   opacity: 0.045;
   animation: grain 9s steps(10) infinite;
 }
+/* En la página del invitado el grano queda ESTÁTICO: 500 teléfonos en un
+   salón no deben gastar batería en compositing continuo. Textura sí, loop no. */
+body.grain:has(.guest-page)::before {
+  animation: none;
+}
+
 @keyframes grain {
   0%, 100% { transform: translate(0, 0); }
   10% { transform: translate(-3%, -6%); }
