@@ -75,7 +75,9 @@ function beatPulse(
 function mediaFilter(look: Look): string | undefined {
   switch (look) {
     case "cinematic":
-      return "contrast(1.08) saturate(1.12) brightness(1.02)";
+      // Saturación contenida: la tendencia 2026 es "natural, no filtrado" —
+      // proteger la piel manda sobre el punch de color.
+      return "contrast(1.08) saturate(1.06) brightness(1.02)";
     case "warm":
       return "contrast(1.05) saturate(1.18) sepia(0.12)";
     case "bw":
@@ -163,16 +165,29 @@ function motionStyle(kind: Motion, frame: number, d: number) {
   }
 }
 
+// Posición del recorte `cover`: hacia el punto de interés (caras) si la IA lo
+// detectó; centro geométrico si no. Evita "decapitar" sujetos en fotos
+// horizontales recortadas a 9:16.
+function focalPosition(focalX: number | null, focalY: number | null): string {
+  const x = focalX == null ? 50 : Math.round(focalX * 100);
+  const y = focalY == null ? 50 : Math.round(focalY * 100);
+  return `${x}% ${y}%`;
+}
+
 function MotionPhoto({
   url,
   durationInFrames,
   motion,
   look,
+  focalX,
+  focalY,
 }: {
   url: string;
   durationInFrames: number;
   motion: Motion;
   look: Look;
+  focalX: number | null;
+  focalY: number | null;
 }) {
   const frame = useCurrentFrame();
   const s = motionStyle(motion, frame, durationInFrames);
@@ -184,6 +199,7 @@ function MotionPhoto({
           width: "100%",
           height: "100%",
           objectFit: "cover",
+          objectPosition: focalPosition(focalX, focalY),
           scale: s.scale,
           translate: s.translate,
           filter: mediaFilter(look),
@@ -260,6 +276,7 @@ function ClipFrame({
               width: "100%",
               height: "100%",
               objectFit: "cover",
+              objectPosition: focalPosition(clip.focalX, clip.focalY),
               filter: mediaFilter(look),
             }}
           />
@@ -269,6 +286,8 @@ function ClipFrame({
             durationInFrames={segment.durationInFrames}
             motion={motion}
             look={look}
+            focalX={clip.focalX}
+            focalY={clip.focalY}
           />
         )}
       </AbsoluteFill>
@@ -306,7 +325,7 @@ function ClipFrame({
         >
           <div
             style={{
-              fontSize: 42,
+              fontSize: 48, // mínimo de legibilidad del spec (§6)
               fontWeight: 600,
               color: "#fff",
               letterSpacing: 0.3,

@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
-import type { ReelClip, ReelFormat } from "@/remotion/types";
-import { FPS, secondsPerBeat } from "@/remotion/types";
+import type { ReelClip, ReelFormat } from "../remotion/types";
+import { FPS, secondsPerBeat } from "../remotion/types";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Música + edición sincronizada al beat.
@@ -191,24 +191,87 @@ function beatsForClip(
   return Math.max(minV, Math.min(maxV, wanted || minV));
 }
 
-// Reescribe las duraciones de los clips para que caigan en la rejilla de beats
+// Extiende la lista de beats medidos si el reel es más largo que el tramo
+// analizado (~90s): continúa la rejilla con el intervalo medio de los últimos
+// compases. Devuelve una copia; no muta la original.
+function extendBeats(beats: number[], needed: number): number[] {
+  if (beats.length >= needed) return beats;
+  const out = beats.slice();
+  const tail = out.slice(-8);
+  const step =
+    tail.length >= 2
+      ? (tail[tail.length - 1] - tail[0]) / (tail.length - 1)
+      : 0.5;
+  while (out.length < needed) out.push(out[out.length - 1] + Math.max(0.1, step));
+  return out;
+}
+
+// Reescribe las duraciones de los clips para que los CORTES caigan en los beats
 // (con el arco de ritmo por posición) y marca los arranques de sección (cambio
 // de momento respecto al clip previo). En una sección los cortes caen secos al
 // beat; en un arranque de sección la transición será un crossfade suave (lo
 // decide Remotion con `sectionStart`).
-export function beatAlignClips(clips: ReelClip[], track: Track): ReelClip[] {
+//
+// Si vienen `measuredBeats` (timestamps reales medidos del audio por
+// beat-detect), cada corte se coloca en el timestamp MEDIDO — no en una rejilla
+// de BPM constante — así los cortes caen en el golpe real aunque el tempo
+// respire. Además, cuando el corte abre una sección nueva, se ajusta ±1 beat
+// para caer en un DOWNBEAT (el golpe fuerte del compás): los cambios de acto
+// aterrizan donde la música "cae". Sin medición, rejilla constante como antes.
+export function beatAlignClips(
+  clips: ReelClip[],
+  track: Track,
+  measuredBeats: number[] = [],
+  measuredDownbeats: number[] = [],
+): ReelClip[] {
   const spb = secondsPerBeat(track.bpm);
   const framesPerBeat = spb * FPS;
   const total = clips.length;
+
+  // Metadatos de sección + beats objetivo por clip (el arco), comunes a ambos caminos.
   let prevLabel: string | null = null;
-  return clips.map((c, i) => {
+  const plan = clips.map((c, i) => {
     const beats = beatsForClip(track.energy, c, spb, i, total);
     const sectionStart = prevLabel !== null && c.label !== prevLabel;
     prevLabel = c.label;
-    return {
-      ...c,
+    return { clip: c, beats, sectionStart };
+  });
+
+  // ── Camino de rejilla constante (sin beats medidos) ──
+  if (measuredBeats.length < 8) {
+    return plan.map(({ clip, beats, sectionStart }) => ({
+      ...clip,
       durationInFrames: Math.max(1, Math.round(beats * framesPerBeat)),
       sectionStart,
-    };
+    }));
+  }
+
+  // ── Camino de beats REALES: cortes en los timestamps medidos ──
+  const totalBeats = plan.reduce((a, p) => a + p.beats, 0);
+  const grid = extendBeats(measuredBeats, totalBeats + 4);
+  // Índices de la rejilla que son downbeats (tolerancia por ser floats).
+  const isDownbeat = (idx: number) =>
+    idx < grid.length &&
+    measuredDownbeats.some((d) => Math.abs(d - grid[idx]) < 1e-3);
+
+  let cutIdx = 0; // índice en `grid` del corte anterior (el reel arranca en t=0)
+  let tPrev = 0;
+  return plan.map(({ clip, beats, sectionStart }, i) => {
+    let k = cutIdx + beats;
+    // Si el SIGUIENTE clip abre sección, movemos este corte ±1 beat para que la
+    // sección nueva entre en un downbeat (donde el compás "cae").
+    const next = plan[i + 1];
+    if (next?.sectionStart && !isDownbeat(k)) {
+      if (isDownbeat(k + 1)) k += 1;
+      else if (isDownbeat(k - 1) && k - 1 > cutIdx) k -= 1;
+    }
+    k = Math.min(k, grid.length - 1);
+    // Último clip: su fin no es un corte (entra el outro en crossfade), pero
+    // mantenemos la duración del arco medida sobre la rejilla real.
+    const tCut = grid[k];
+    const durationInFrames = Math.max(1, Math.round((tCut - tPrev) * FPS));
+    cutIdx = k;
+    tPrev = tCut;
+    return { ...clip, durationInFrames, sectionStart };
   });
 }

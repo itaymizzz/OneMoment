@@ -80,6 +80,8 @@ model MediaItem {
   moment      String? // entrada | ceremonia | beso | baile | brindis | fiesta | ...
   hasFaces    Boolean @default(false)
   faceCount   Int     @default(0)
+  focalX      Float? // centro de interés 0..1 (caras) para el encuadre 9:16
+  focalY      Float?
   caption     String? // descripción generada por IA
   selected    Boolean @default(false) // entró en el "mejor de"
 

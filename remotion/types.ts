@@ -11,6 +11,10 @@ export const reelClipSchema = z.object({
   kind: z.enum(["photo", "video"]),
   label: z.string().default(""), // etiqueta del momento (Ceremonia, Fiesta…)
   durationInFrames: z.number().int().positive(),
+  // Centro de interés (0..1) detectado por la IA (caras): el recorte a 9:16
+  // encuadra hacia este punto en vez del centro geométrico. null → centro.
+  focalX: z.number().min(0).max(1).nullable().default(null),
+  focalY: z.number().min(0).max(1).nullable().default(null),
   // Arranca una nueva "sección" (cambió el momento respecto al clip anterior):
   // la transición de entrada será más larga/suave (crossfade) en vez de un
   // corte seco al ritmo. Lo fija el servidor al construir la línea de tiempo.

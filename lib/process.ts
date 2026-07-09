@@ -202,6 +202,7 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
   // calidad técnica (top N) y mezclamos la estética/emoción en su puntuación.
   const aiMoment = new Map<string, string>();
   const aiFaces = new Map<string, { faces: number; smile: boolean }>();
+  const aiFocal = new Map<string, { x: number; y: number }>();
   if (ai.anthropic || ai.aws) {
     const fileOf = new Map(items.map((it) => [it.id, it.filename]));
     const CURATE_MAX = Number(process.env.AI_CURATE_MAX || 60);
@@ -223,6 +224,8 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
         quality.set(w.id, q);
         if (score.moment) aiMoment.set(w.id, score.moment);
         aiFaces.set(w.id, { faces: score.faces, smile: score.smile });
+        if (score.focalX != null && score.focalY != null)
+          aiFocal.set(w.id, { x: score.focalX, y: score.focalY });
       } catch {
         /* si falla una foto, seguimos con las demás */
       }
@@ -324,6 +327,10 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
               hasFaces: aiFaces.get(w.id)!.faces > 0,
               faceCount: aiFaces.get(w.id)!.faces,
             }
+          : {}),
+        // Punto de interés (caras) para el encuadre 9:16 de la película.
+        ...(aiFocal.has(w.id)
+          ? { focalX: aiFocal.get(w.id)!.x, focalY: aiFocal.get(w.id)!.y }
           : {}),
         ...(m ? { width: m.width || null, height: m.height || null } : {}),
         caption: (() => {

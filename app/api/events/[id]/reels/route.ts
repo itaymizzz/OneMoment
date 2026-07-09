@@ -54,7 +54,7 @@ const FORMAT_CFG: Record<
   ReelFormat,
   { photoSec: number; videoCapSec: number; maxClips: number }
 > = {
-  reel: { photoSec: 2.4, videoCapSec: 4, maxClips: 18 },
+  reel: { photoSec: 2.4, videoCapSec: 4, maxClips: 20 },
   trailer: { photoSec: 3.0, videoCapSec: 5, maxClips: 40 },
   film: { photoSec: 3.5, videoCapSec: 8, maxClips: 120 },
 };
@@ -258,6 +258,9 @@ export async function POST(
       kind: isVideo ? "video" : "photo",
       label: m.moment ? MOMENT_LABEL[m.moment]?.label ?? "" : "",
       durationInFrames: Math.max(1, Math.round(secs * FPS)),
+      // Encuadre hacia las caras (si la curación IA lo midió).
+      focalX: m.focalX ?? null,
+      focalY: m.focalY ?? null,
       sectionStart: false, // lo fija beatAlignClips según el cambio de momento
     } as ReelClip;
   });
@@ -306,8 +309,9 @@ export async function POST(
     }
   }
 
-  // Ajustamos las duraciones de los clips a la rejilla de beats.
-  const alignedClips = beatAlignClips(clips, track);
+  // Ajustamos las duraciones de los clips para que los cortes caigan en los
+  // beats MEDIDOS del audio (si los hay); si no, en la rejilla de BPM constante.
+  const alignedClips = beatAlignClips(clips, track, realBeats, realDownbeats);
 
   // Gradación de color: si hay un LUT 3D activado (GRADE_LUT), renderizamos sin
   // el look CSS y lo aplica FFmpeg después (más exacto, "de cine"). Si no, el
