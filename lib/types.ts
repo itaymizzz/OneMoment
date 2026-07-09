@@ -18,6 +18,9 @@ export type Media = {
   durationS: number | null;
   createdAt: string | Date;
   guest?: { name: string } | null;
+  // Fiesta en vivo: misión cumplida (etiqueta en el muro) y moderación.
+  mission?: { title: string } | null;
+  approved?: boolean;
 };
 
 // Momentos canónicos de un evento, en orden cronológico para la línea de tiempo.

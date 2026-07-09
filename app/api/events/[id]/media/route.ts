@@ -75,7 +75,10 @@ export async function GET(
   const media = await prisma.mediaItem.findMany({
     where: { eventId: id },
     orderBy: { createdAt: "asc" },
-    include: { guest: { select: { name: true } } },
+    include: {
+      guest: { select: { name: true } },
+      mission: { select: { title: true } },
+    },
   });
   return NextResponse.json({ media });
 }
@@ -96,7 +99,7 @@ export async function POST(
   }
   const event = await prisma.event.findUnique({
     where: { id },
-    select: { id: true, uploadLimit: true, plan: true },
+    select: { id: true, uploadLimit: true, plan: true, moderateWall: true },
   });
   if (!event) {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });
@@ -187,6 +190,28 @@ export async function POST(
   const metaWidth = num("width");
   const metaHeight = num("height");
 
+  // ── Misión: la subida cumple un reto del evento (validamos que exista y sea
+  // de ESTE evento; un id ajeno simplemente se ignora). ──
+  let missionId: string | null = null;
+  const rawMission = form.get("missionId");
+  if (typeof rawMission === "string" && rawMission) {
+    const mission = await prisma.mission.findFirst({
+      where: { id: rawMission, eventId: id },
+      select: { id: true },
+    });
+    missionId = mission?.id ?? null;
+  }
+
+  // ── Momento Flash: si hay un flash reciente, la subida queda etiquetada con
+  // él (ventana generosa: la foto se toma, se elige y se sube con WiFi de
+  // salón). Server-side — el cliente no puede inventar flashes. ──
+  const FLASH_TAG_MS = 150 * 1000;
+  const activeFlash = await prisma.flash.findFirst({
+    where: { eventId: id, firedAt: { gt: new Date(Date.now() - FLASH_TAG_MS) } },
+    orderBy: { firedAt: "desc" },
+    select: { id: true },
+  });
+
   // Tope total por evento: si ya está lleno, rechazamos ANTES de tocar disco.
   // Contamos lo que ocupa + lo que viene en esta petición.
   const used = await eventDirSize(id);
@@ -229,6 +254,10 @@ export async function POST(
         filename,
         mimeType: file.type,
         status: "pending", // la capa de IA (task 5) lo recoge desde aquí
+        missionId,
+        flashId: activeFlash?.id ?? null,
+        // Moderación del muro: con el toggle activo, lo nuevo espera aprobación.
+        approved: !event.moderateWall,
         // Para video guardamos lo que mandó el cliente (la IA lo usa para rankear).
         ...(isVideo
           ? { durationS: metaDurationS, width: metaWidth, height: metaHeight }

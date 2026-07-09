@@ -34,10 +34,19 @@ model Event {
   coverColor String    @default("#0f0f12")
   createdAt  DateTime  @default(now())
 
-  guests Guest[]
-  media  MediaItem[]
-  reels  Reel[]
-  tracks Track[]
+  // ── Muro en vivo ──
+  // moderateWall: las subidas NUEVAS esperan aprobación del organizador antes
+  // de aparecer en pantalla (eventos formales). wallCounter: contador de
+  // "momentos capturados" en la esquina del muro (energía social).
+  moderateWall Boolean @default(false)
+  wallCounter  Boolean @default(true)
+
+  guests   Guest[]
+  media    MediaItem[]
+  reels    Reel[]
+  tracks   Track[]
+  missions Mission[]
+  flashes  Flash[]
 
   @@index([userId])
   @@index([ownerEmail])
@@ -69,6 +78,38 @@ model Guest {
   eventId   String
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  media MediaItem[]
+
+  @@index([eventId])
+}
+
+// Misión de fotos: reto de subida que gamifica la captura ("selfie con alguien
+// que no conoces"). Las define el organizador (con un set por defecto según el
+// tipo de evento) y el invitado las completa subiendo con la misión activa.
+
+model Mission {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title     String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  media MediaItem[]
+
+  @@index([eventId])
+}
+
+// Momento Flash: el organizador aprieta un botón y TODOS los teléfonos
+// conectados muestran "📸 ¡FOTO AHORA!". Las subidas de la ventana siguiente
+// quedan etiquetadas con el flash. Puede haber varios por evento.
+
+model Flash {
+  id      String   @id @default(cuid())
+  eventId String
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  firedAt DateTime @default(now())
 
   media MediaItem[]
 
@@ -112,6 +153,16 @@ model MediaItem {
   // ----- Anulación manual del dueño (gana sobre la IA) -----
   pinned Boolean @default(false) // forzar DENTRO de la película (aunque la IA no la eligiera)
   hidden Boolean @default(false) // forzar FUERA de la película (aunque la IA la eligiera)
+
+  // ----- Fiesta en vivo -----
+  // Misión que cumplió esta subida (null = subida libre) y flash al que llegó.
+  missionId String?
+  mission   Mission? @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  flashId   String?
+  flash     Flash?   @relation(fields: [flashId], references: [id], onDelete: SetNull)
+  // Moderación del muro: con moderateWall activo, lo nuevo nace en false y el
+  // organizador lo aprueba desde el panel. Sin moderación todo nace aprobado.
+  approved  Boolean  @default(true)
 
   @@index([eventId, status])
   @@index([eventId, moment])

@@ -43,10 +43,15 @@ export async function PATCH(
   const body = (await req.json().catch(() => null)) as {
     pinned?: boolean;
     hidden?: boolean;
+    approved?: boolean;
   } | null;
   if (!body) return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
 
   const data: Record<string, boolean> = {};
+  // Moderación del muro: aprobar/retener una pieza (independiente de la película).
+  if (typeof body.approved === "boolean") {
+    data.approved = body.approved;
+  }
   if (typeof body.pinned === "boolean") {
     data.pinned = body.pinned;
     if (body.pinned) {
@@ -80,6 +85,7 @@ export async function PATCH(
       selected: item.selected,
       isBlurry: item.isBlurry,
       isDuplicate: item.isDuplicate,
+      approved: item.approved,
     });
   } catch {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 });

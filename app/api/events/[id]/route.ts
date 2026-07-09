@@ -16,12 +16,29 @@ export async function PATCH(
   const body = (await req.json().catch(() => null)) as {
     ownerEmail?: string;
     type?: string;
+    moderateWall?: boolean;
+    wallCounter?: boolean;
   } | null;
-  if (!body || (typeof body.ownerEmail !== "string" && typeof body.type !== "string")) {
+  if (
+    !body ||
+    (typeof body.ownerEmail !== "string" &&
+      typeof body.type !== "string" &&
+      typeof body.moderateWall !== "boolean" &&
+      typeof body.wallCounter !== "boolean")
+  ) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  const data: { ownerEmail?: string | null; type?: string } = {};
+  const data: {
+    ownerEmail?: string | null;
+    type?: string;
+    moderateWall?: boolean;
+    wallCounter?: boolean;
+  } = {};
+
+  // Ajustes del muro en vivo: moderación previa y contador de momentos.
+  if (typeof body.moderateWall === "boolean") data.moderateWall = body.moderateWall;
+  if (typeof body.wallCounter === "boolean") data.wallCounter = body.wallCounter;
 
   if (typeof body.ownerEmail === "string") {
     const email = body.ownerEmail.trim().slice(0, 200);
@@ -42,7 +59,12 @@ export async function PATCH(
 
   try {
     const ev = await prisma.event.update({ where: { id }, data });
-    return NextResponse.json({ ownerEmail: ev.ownerEmail, type: ev.type });
+    return NextResponse.json({
+      ownerEmail: ev.ownerEmail,
+      type: ev.type,
+      moderateWall: ev.moderateWall,
+      wallCounter: ev.wallCounter,
+    });
   } catch {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });
   }
