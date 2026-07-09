@@ -132,7 +132,7 @@ async function uploadOne(
   file: Blob,
   fileName: string,
   onProgress: (pct: number) => void,
-): Promise<boolean> {
+): Promise<{ ok: boolean; limitReached: boolean }> {
   const fd = new FormData();
   if (identity.token) fd.append("guestToken", identity.token);
   else fd.append("guestId", identity.guestId);
@@ -144,16 +144,22 @@ async function uploadOne(
     if (m.height) fd.append("height", String(m.height));
   }
 
-  return new Promise((resolve) => {
+  return new Promise<{ ok: boolean; limitReached: boolean }>((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/events/${eventId}/media`);
     xhr.timeout = UPLOAD_TIMEOUT_MS; // no dejamos subidas colgadas para siempre
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
-    xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
-    xhr.onerror = () => resolve(false);
-    xhr.ontimeout = () => resolve(false);
+    xhr.onload = () =>
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        // 402: el evento llegó al límite de su paquete — reintentar no sirve;
+        // avisamos con elegancia y el organizador amplía desde su panel.
+        limitReached: xhr.status === 402,
+      });
+    xhr.onerror = () => resolve({ ok: false, limitReached: false });
+    xhr.ontimeout = () => resolve({ ok: false, limitReached: false });
     xhr.send(fd);
   });
 }
@@ -171,6 +177,8 @@ export default function Uploader({
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
+  // El evento llegó al límite de su paquete (402): banner elegante, sin drama.
+  const [limitHit, setLimitHit] = useState(false);
   // "Mis fotos": las subidas confirmadas de ESTE invitado, según el servidor.
   const [mine, setMine] = useState<MineItem[]>([]);
   const [showMine, setShowMine] = useState(false);
@@ -385,9 +393,21 @@ export default function Uploader({
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       patch(itemId, { status: "uploading", progress: 0 });
-      const ok = await uploadOne(eventId, who, file, fileName, (pct) =>
-        patch(itemId, { progress: pct }),
+      const { ok, limitReached } = await uploadOne(
+        eventId,
+        who,
+        file,
+        fileName,
+        (pct) => patch(itemId, { progress: pct }),
       );
+      if (limitReached) {
+        // Límite del paquete: no es un fallo de red — no reintentamos. El
+        // archivo queda guardado en el teléfono (IndexedDB); si el organizador
+        // amplía, una recarga lo retoma.
+        setLimitHit(true);
+        patch(itemId, { status: "pending", progress: 0 });
+        return false;
+      }
       if (ok) {
         patch(itemId, { progress: 100, status: "done" });
         await deletePending(itemId); // ya está a salvo en el servidor
@@ -591,6 +611,13 @@ export default function Uploader({
 
         {/* Estado de las subidas: legible de un vistazo, en un salón oscuro. */}
         <div aria-live="polite" className="mt-4 min-h-[1.25rem] text-sm">
+          {limitHit && (
+            <p className="rounded border border-accent/40 bg-accent/10 px-3 py-2 text-[13px] leading-relaxed text-accent">
+              El álbum del evento está lleno. Tus fotos quedan guardadas en tu
+              teléfono — avísale al organizador para ampliar el evento y se
+              subirán solas.
+            </p>
+          )}
           {offline && inFlight > 0 && (
             <p className="font-medium text-accent">
               Sin conexión — {inFlight} en cola. Se subirán solas al volver la

@@ -11,6 +11,7 @@ import ClaimOwner from "./ClaimOwner";
 import DangerZone from "./DangerZone";
 import NotifyEmail from "./NotifyEmail";
 import EventSettings from "./EventSettings";
+import PackagePanel from "./PackagePanel";
 import { headers } from "next/headers";
 import { baseUrl } from "@/lib/base-url";
 import { ownerCookieName, tokenMatches, sessionOwnsEvent } from "@/lib/owner";
@@ -29,10 +30,10 @@ export default async function EventDashboard({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ k?: string }>;
+  searchParams: Promise<{ k?: string; paid?: string }>;
 }) {
   const { id } = await params;
-  const { k } = await searchParams;
+  const { k, paid } = await searchParams;
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
@@ -149,6 +150,14 @@ export default async function EventDashboard({
           {/* Panel de compartir / QR + email de avisos */}
           <div>
             <SharePanel joinUrl={joinUrl} qrDataUrl={qrDataUrl} eventName={event.name} />
+            <PackagePanel
+              eventId={event.id}
+              plan={event.plan}
+              uploadLimit={event.uploadLimit}
+              paidCents={event.paidCents}
+              mediaCount={event._count.media}
+              justPaid={paid === "1"}
+            />
             <EventSettings eventId={event.id} initialType={event.type} />
             <NotifyEmail eventId={event.id} initialEmail={event.ownerEmail ?? ""} />
           </div>

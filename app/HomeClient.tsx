@@ -9,6 +9,7 @@ import DemoReel from "@/app/components/DemoReel";
 // Tipos de evento desde el config de perfiles de edición: cada tipo trae su
 // ritmo de montaje, música y look propios (lib/editing-profiles.json).
 import { EVENT_TYPES } from "@/lib/profiles";
+import { PACKAGES, quoteForUploads, MAX_CUSTOM_UPLOADS } from "@/lib/pricing";
 
 const FAQ = [
   {
@@ -45,13 +46,147 @@ const FAQ = [
   },
   {
     q: "¿Cuánto tiempo se guardan las fotos y videos?",
-    a: "Tu galería no desaparece al terminar la fiesta: sigue disponible después del evento para que descargues los originales y la película con calma. Durante la beta no borramos nada automáticamente; si algún día aplicamos un límite de retención, avisaremos con tiempo de sobra.",
+    a: "Tu galería no desaparece al terminar la fiesta: en los paquetes pagados sigue disponible 12 meses después del evento, para que descargues los originales y la película con calma. En la demo gratuita la galería dura 30 días.",
   },
   {
     q: "¿Cuánto cuesta?",
-    a: "Gratis durante la beta. Después será un pago único por evento —sin suscripción—, en la línea de lo que cobra el mercado.",
+    a: "Un pago único por evento, según su tamaño: 100 fotos y videos por $39, 300 por $69, 800 por $119, y eventos más grandes con precio a medida (hasta 20.000). Todos los paquetes incluyen exactamente lo mismo —reel, tráiler y película sin marca de agua, muro en vivo y galería por 12 meses—; solo cambia cuánto material cabe. Y puedes empezar gratis con la demo de 30 fotos. Sin suscripción.",
   },
 ];
+
+// ── Sección de precios ──────────────────────────────────────────────────────
+// Paquetes por TAMAÑO del evento, no por funciones: todos incluyen todo.
+// Los precios salen del motor central (lib/pricing) — la landing nunca puede
+// desincronizarse del precio que cobra el checkout.
+
+const PAID_PACKAGES = PACKAGES.filter((p) => p.priceUsd > 0);
+
+const INCLUDES = [
+  "Reel, tráiler y película — sin marca de agua",
+  "Muro de fotos en vivo (TV / proyector)",
+  "Elección de música por ambiente",
+  "Galería del evento durante 12 meses",
+  "Descarga de todos los originales (ZIP)",
+];
+
+function CustomCalculator() {
+  const [uploads, setUploads] = useState(2000);
+  const clamped = Math.min(MAX_CUSTOM_UPLOADS, Math.max(30, uploads || 30));
+  const quote = quoteForUploads(clamped);
+  return (
+    <div className="mt-14 border border-hairline p-6 md:p-10">
+      <div className="md:flex md:items-end md:justify-between md:gap-10">
+        <div className="max-w-sm">
+          <p className="eyebrow">Personalizado</p>
+          <h3 className="font-display mt-3 text-3xl font-light">
+            ¿Un evento más grande?
+          </h3>
+          <p className="mt-3 text-sm leading-relaxed text-muted">
+            Hasta {MAX_CUSTOM_UPLOADS.toLocaleString("es-PA")} fotos y videos,
+            con descuento por volumen. Mueve la cifra y mira el precio.
+          </p>
+        </div>
+        <div className="mt-8 md:mt-0 md:text-right">
+          <label htmlFor="custom-uploads" className="eyebrow block">
+            Fotos y videos
+          </label>
+          <input
+            id="custom-uploads"
+            type="number"
+            min={30}
+            max={MAX_CUSTOM_UPLOADS}
+            step={100}
+            value={uploads}
+            onChange={(e) => setUploads(Number(e.target.value))}
+            className="mt-2 w-40 border border-hairline bg-transparent px-4 py-3 font-mono text-lg text-foreground outline-none focus:border-accent md:text-right"
+          />
+          <p className="font-display mt-4 text-5xl font-light text-accent">
+            ${quote.priceUsd}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            pago único · todo incluido · hasta{" "}
+            {clamped.toLocaleString("es-PA")} archivos
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PricingSection() {
+  return (
+    <section id="precios" className="scroll-mt-10 py-24 md:py-36">
+      <Reveal>
+        <SceneHeader label="El precio" />
+        <h2 className="font-display mt-6 max-w-3xl text-4xl font-light leading-[1.1] md:text-6xl">
+          Pagas por el tamaño del evento,
+          <br />
+          no por <em className="italic text-accent">funciones</em>.
+        </h2>
+        <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">
+          Todos los paquetes incluyen exactamente lo mismo. Solo eliges cuántas
+          fotos y videos cabrán en tu evento. Pago único, sin suscripción.
+        </p>
+      </Reveal>
+
+      <Reveal className="mt-14" delay={80}>
+        <div className="grid gap-px border border-hairline bg-hairline md:grid-cols-3">
+          {PAID_PACKAGES.map((p, i) => (
+            <div
+              key={p.id}
+              className="flex flex-col bg-background p-8 md:p-10"
+            >
+              <p className="eyebrow">
+                {i === 1 ? "El más elegido" : `Paquete ${"I".repeat(i + 1)}`}
+              </p>
+              <p className="font-display mt-6 text-5xl font-light">
+                {p.uploads.toLocaleString("es-PA")}
+                <span className="ml-2 text-base text-muted">
+                  fotos y videos
+                </span>
+              </p>
+              <p
+                className={`font-display mt-4 text-4xl font-light ${i === 1 ? "text-accent" : ""}`}
+              >
+                ${p.priceUsd}
+                <span className="ml-2 text-sm text-muted">por evento</span>
+              </p>
+              <a
+                href="#crear"
+                className={`mt-8 inline-block border px-6 py-3 text-center text-sm transition-colors ${
+                  i === 1
+                    ? "border-accent bg-accent text-background hover:bg-transparent hover:text-accent"
+                    : "border-hairline hover:border-accent hover:text-accent"
+                }`}
+              >
+                Crear mi evento
+              </a>
+            </div>
+          ))}
+        </div>
+        <ul className="mt-10 grid gap-x-10 gap-y-2 text-sm text-muted md:grid-cols-2">
+          {INCLUDES.map((t) => (
+            <li key={t} className="flex items-baseline gap-3">
+              <span aria-hidden className="text-accent">
+                —
+              </span>
+              {t}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-8 text-sm text-muted">
+          ¿Quieres probar primero? Crea tu evento gratis: la demo incluye 30
+          fotos y un reel con una marca discreta. Cuando quieras, lo amplías
+          desde tu panel y la marca desaparece.
+        </p>
+      </Reveal>
+
+      <Reveal delay={120}>
+        <CustomCalculator />
+      </Reveal>
+    </section>
+  );
+}
 
 // Cabecera de sección estilo "cartela de escena": mono + hairline.
 function SceneHeader({ label }: { label: string }) {
@@ -378,6 +513,9 @@ export default function HomeClient() {
             </table>
           </Reveal>
         </section>
+
+        {/* ═══ EL PRECIO · paquetes por tamaño + calculadora ═══ */}
+        <PricingSection />
 
         {/* ═══ HISTORIAS · ejemplos ilustrativos (NO testimonios reales) ═══ */}
         <section className="py-24 md:py-36">
