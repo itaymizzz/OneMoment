@@ -56,6 +56,13 @@ export async function POST(
   const dueUsd = upgradePriceUsd(quote, event.paidCents);
   const dueCents = Math.round(dueUsd * 100);
 
+  if (paymentsMode() === "off") {
+    // Producción sin STRIPE_SECRET_KEY: jamás regalamos el desbloqueo.
+    return NextResponse.json(
+      { error: "Los pagos aún no están habilitados. Escríbenos y lo activamos." },
+      { status: 503 },
+    );
+  }
   if (paymentsMode() === "mock") {
     // Desarrollo sin clave de Stripe: desbloqueo inmediato (mismo unlock).
     await unlockPackage({

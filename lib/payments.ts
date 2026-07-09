@@ -16,8 +16,18 @@ export function stripeClient(): Stripe | null {
   return key ? new Stripe(key) : null;
 }
 
-export function paymentsMode(): "stripe" | "mock" {
-  return stripeClient() ? "stripe" : "mock";
+// "mock" SOLO fuera de producción (o con ALLOW_MOCK_PAYMENTS=1 explícito):
+// en prod sin clave de Stripe el checkout se declara no disponible en vez de
+// regalar desbloqueos.
+export function paymentsMode(): "stripe" | "mock" | "off" {
+  if (stripeClient()) return "stripe";
+  if (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_MOCK_PAYMENTS === "1"
+  ) {
+    return "mock";
+  }
+  return "off";
 }
 
 // Desbloquea (o mejora) el paquete de un evento. Idempotente por sessionId.
