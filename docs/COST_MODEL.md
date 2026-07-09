@@ -1,5 +1,12 @@
 # OneMoment — Cost Model (July 2026)
 
+> **ACTUALIZADO (9 jul 2026, tarde)** — tras la reestructuración del stack de
+> IA ("editamos momentos reales, no generamos contenido"), ver §7 al final:
+> Suno reemplazado por biblioteca licenciada ($0/evento, sin cuota mensual),
+> curación una-sola-vez + Haiku + downscale aplicados. Un evento de 300 subidas
+> pasó de **$23.40 a ~$1.70** de coste variable. Las secciones 1–6 se conservan
+> como el análisis que motivó los cambios.
+
 Measured from the actual pipeline code (call sites and frequencies verified in
 `lib/process.ts`, `lib/ai/*`, `app/api/**`), env vars in Railway + local `.env`,
 and current public pricing (sources at the bottom). Baseline event: **300
@@ -209,6 +216,67 @@ Honorable mentions: gate `processEvent` behind the render button entirely
 (organizer pays the AI cost once, when they ask for the film) — saves even the
 240-call floor for events that never render; delete-event now exists (July 9) —
 surface "your event is X GB, download & archive?" after 90 days.
+
+---
+
+## 7. Post-reestructuración (aplicado el 9 jul 2026)
+
+Cambios implementados (commits `e1f20db`, `54c2404`, `5b1c85e`):
+
+1. **fal.ai** — confirmado 100% fuera (ya se había retirado; sin claves, sin
+   SDK, sin coste). Fotos: selección + encuadre a caras + color, nada más.
+2. **Suno/ElevenLabs/Music.ai eliminados** → biblioteca de 11 pistas
+   licenciadas (CC BY 4.0, ver `public/music/LICENSES.md`) organizadas por
+   vibe, con beats precomputados por pista. Música: **$0.00/evento y $0/mes**
+   (desaparece la cuota de $5/mes de sunoapi.org).
+3. **Curación una-sola-vez** (`curatedAt`) + **downscale a 1568px** + modelo
+   **claude-haiku-4-5**: de ~720 llamadas Opus a ≤240 llamadas Haiku por
+   evento de 300 subidas.
+
+### Coste variable por evento (nuevo stack)
+
+| Servicio | 100 subidas | 300 subidas | 800 subidas |
+|---|---|---|---|
+| Claude visión (Haiku, 1×/foto, 1568px) | $0.20 | $0.61 | $1.60 |
+| Rekognition (1×/foto) | $0.08 | $0.24 | $0.64 |
+| Música (biblioteca licenciada) | $0.00 | $0.00 | $0.00 |
+| Render (Railway) | $0.30 | $0.30 | $0.35 |
+| Storage 1er mes | $0.33 | $0.98 | $2.55 |
+| Egress | $0.25 | $0.60 | $1.50 |
+| **Total variable** | **$1.16** | **$2.73** | **$6.64** |
+
+### Fijos mensuales (nuevo stack)
+
+Railway Hobby $5 + idle ~$5–6 + volumen. **≈ $6–12/mes** (antes $11–17: cae la
+cuota de Suno; Resend sigue en tier gratis).
+
+### All-in por evento y márgenes (fijos amortizados a 10 eventos/mes + 12 meses de storage en Railway; con R2 sería aún menor)
+
+| | 100 subidas | 300 subidas | 800 subidas |
+|---|---|---|---|
+| **All-in** | $6.29 | **$14.96** | $36.19 |
+| Margen @ $39 | 84% | **62%** | 7% |
+| Margen @ $79 | 92% | **81%** | 54% |
+| All-in con R2 tras 30 días | $3.02 | $5.30 | $10.95 |
+| Margen @ $39 / $79 con R2 | 92% / 96% | **86% / 93%** | 72% / 86% |
+
+La única optimización pendiente de las top-3 es **R2 cold storage** (§5-§6):
+sin ella, el storage a 12 meses vuelve a ser el mayor coste por evento.
+
+### Riesgo de calidad monitoreable
+
+La curación pasó de Opus 4.8 a Haiku 4.5 (11× más barato). Si el "mejor de"
+elige peor (más ojos cerrados, momentos mal etiquetados), se revierte con
+`railway variables --set "ANTHROPIC_MODEL=claude-opus-4-8"` — con la curación
+una-sola-vez, incluso Opus costaría $6.90/evento (vs $20.60 antes).
+
+### Nota de licencias de música
+
+Las 11 pistas actuales (Kevin MacLeod) requieren **atribución** (CC BY 4.0):
+"Music: Kevin MacLeod (incompetech.com), CC BY 4.0" en la descripción o
+créditos del video. Al pasar a Artlist/Epidemic Sound (suscripción), la
+atribución desaparece pero la licencia depende de mantener la suscripción
+activa — documentar cada pista en `public/music/LICENSES.md`.
 
 ---
 
