@@ -14,6 +14,7 @@ import {
   isVibe,
   reelClipBudget,
   trackCredit,
+  planAudioForDrop,
 } from "@/lib/music";
 import { normalizePhoto, enhancedName } from "@/lib/ai/normalize";
 import {
@@ -189,26 +190,25 @@ export async function POST(
   });
   media = media.slice(0, cfg.maxClips);
 
-  // Gancho: la mejor toma va PRIMERO (no un plano de contexto). Priorizamos los
-  // momentos emotivos (beso/ceremonia/primer baile/brindis) y, dentro, la mayor
-  // calidad. El resto queda cronológico, así tras el gancho fluye prep→…→final y
-  // el último plano hace de cierre. Sólo para el reel corto (formatos largos
-  // mantienen la narrativa cronológica pura).
+  // Gancho + héroe (sólo reel; los formatos largos van cronológicos puros).
+  // Ranking emotivo (beso/ceremonia/primer baile/brindis pesan más, luego
+  // calidad): el #2 abre el reel como GANCHO y el #1 —el héroe— se reserva
+  // para caer EXACTAMENTE en el drop de la música (ver más abajo). Con el
+  // arco: gancho → build → drop con la mejor toma → fiesta → cierre.
+  let heroId: string | null = null;
   if (format === "reel" && media.length > 2) {
     const HOOK_MOMENTS = new Set(["kiss", "ceremony", "firstdance", "toast"]);
-    let hookIdx = 0;
-    let hookScore = -Infinity;
-    media.forEach((m, i) => {
-      const emo = HOOK_MOMENTS.has(m.moment ?? "") ? 0.5 : 0;
-      const score = (m.qualityScore ?? 0) + emo;
-      if (score > hookScore) {
-        hookScore = score;
-        hookIdx = i;
-      }
-    });
+    const score = (m: (typeof media)[number]) =>
+      (m.qualityScore ?? 0) + (HOOK_MOMENTS.has(m.moment ?? "") ? 0.5 : 0);
+    const photos = media.filter((m) => m.kind === "photo");
+    const ranked = [...photos].sort((a, b) => score(b) - score(a));
+    const hero = ranked[0];
+    const hook = ranked[1] ?? ranked[0];
+    heroId = hero && hero.id !== hook.id ? hero.id : null;
+    const hookIdx = media.findIndex((m) => m.id === hook.id);
     if (hookIdx > 0) {
-      const [hook] = media.splice(hookIdx, 1);
-      media.unshift(hook);
+      const [h] = media.splice(hookIdx, 1);
+      media.unshift(h);
     }
   }
 
@@ -287,9 +287,71 @@ export async function POST(
     } as ReelClip;
   });
 
+  // ── Drop: planifica el audio para que el drop de la pista caiga en el
+  // clímax del reel (~55%), desplaza la rejilla de beats acorde y fuerza un
+  // corte exactamente ahí. Después, el HÉROE (mejor toma) se intercambia al
+  // clip que arranca en ese corte — la mejor imagen entra cuando la música cae.
+  let audioStartSec = 0;
+  let dropAtSec: number | null = null;
+  if (format === "reel" && tb?.dropSec != null && realBeats.length > 0) {
+    const approxReelSec =
+      clips.reduce((a, c) => a + c.durationInFrames, 0) / FPS;
+    const plan = planAudioForDrop(tb.dropSec, approxReelSec);
+    audioStartSec = plan.audioStartSec;
+    dropAtSec = plan.dropAtSec;
+    if (audioStartSec > 0) {
+      realBeats = realBeats.map((t) => t - audioStartSec).filter((t) => t >= 0);
+      realDownbeats = realDownbeats
+        .map((t) => t - audioStartSec)
+        .filter((t) => t >= 0);
+      track = { ...track, beatOffsetSec: realBeats[0] ?? 0 };
+    }
+  }
+
   // Ajustamos las duraciones de los clips para que los cortes caigan en los
   // beats MEDIDOS del audio (si los hay); si no, en la rejilla de BPM constante.
-  const alignedClips = beatAlignClips(clips, track, realBeats, realDownbeats);
+  const { clips: alignedClips, dropClipIndex } = beatAlignClips(
+    clips,
+    track,
+    realBeats,
+    realDownbeats,
+    dropAtSec,
+  );
+
+  // Héroe al drop: intercambio de contenido entre dos fotos (las duraciones
+  // son posicionales, así que el intercambio no mueve ningún corte).
+  if (heroId && dropClipIndex != null) {
+    let slot = dropClipIndex;
+    if (alignedClips[slot]?.kind !== "photo") {
+      if (alignedClips[slot + 1]?.kind === "photo") slot = slot + 1;
+      else if (alignedClips[slot - 1]?.kind === "photo" && slot - 1 > 0)
+        slot = slot - 1;
+      else slot = -1;
+    }
+    const heroIdx = alignedClips.findIndex((c) => c.id === heroId);
+    if (
+      slot > 0 &&
+      slot < alignedClips.length - 1 && // nunca el cierre
+      heroIdx > 0 &&
+      heroIdx !== slot
+    ) {
+      const heroClip = alignedClips[heroIdx];
+      const slotClip = alignedClips[slot];
+      // Intercambia identidad visual conservando duración/section del hueco.
+      alignedClips[slot] = {
+        ...heroClip,
+        durationInFrames: slotClip.durationInFrames,
+        sectionStart: slotClip.sectionStart,
+        label: slotClip.label,
+      };
+      alignedClips[heroIdx] = {
+        ...slotClip,
+        durationInFrames: heroClip.durationInFrames,
+        sectionStart: heroClip.sectionStart,
+        label: heroClip.label,
+      };
+    }
+  }
 
   // Gradación de color: si hay un LUT 3D activado (GRADE_LUT), renderizamos sin
   // el look CSS y lo aplica FFmpeg después (más exacto, "de cine"). Si no, el
@@ -314,6 +376,7 @@ export async function POST(
     musicCredit: trackCredit(track),
     clips: alignedClips,
     audioUrl: `${baseUrl()}${track.file}`,
+    audioStartSec,
     bpm: track.bpm,
     beatOffsetSec: track.beatOffsetSec,
     beats: realBeats,

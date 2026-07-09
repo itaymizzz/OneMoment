@@ -166,7 +166,30 @@ export type TrackBeats = {
   beats: number[];
   downbeats: number[];
   beatOffsetSec: number;
+  // El drop/estribillo (o el compás más acentuado) medido del audio, en
+  // segundos de la PISTA. null en JSONs antiguos.
+  dropSec?: number | null;
 };
+
+// Planifica el audio del reel alrededor del drop: si el drop de la pista cae
+// dentro del reel, se usa tal cual; si cae más tarde, la pista arranca con un
+// offset para que el drop aterrice en el "clímax" del arco (~55% del reel).
+// Devuelve el corte de arranque del audio y el instante del drop EN TIEMPO DEL
+// REEL (o null si no hay drop utilizable — p.ej. caería encima del gancho).
+export function planAudioForDrop(
+  dropSec: number | null | undefined,
+  reelSec: number,
+): { audioStartSec: number; dropAtSec: number | null } {
+  if (dropSec == null) return { audioStartSec: 0, dropAtSec: null };
+  const MIN_DROP_AT = 8; // el gancho y la intro necesitan su espacio
+  if (dropSec <= reelSec * 0.75) {
+    return dropSec >= MIN_DROP_AT
+      ? { audioStartSec: 0, dropAtSec: dropSec }
+      : { audioStartSec: 0, dropAtSec: null };
+  }
+  const target = reelSec * 0.55;
+  return { audioStartSec: dropSec - target, dropAtSec: target };
+}
 
 const STORAGE_ROOT =
   process.env.STORAGE_ROOT || path.join(process.cwd(), "storage");
@@ -299,7 +322,10 @@ export function beatAlignClips(
   track: Track,
   measuredBeats: number[] = [],
   measuredDownbeats: number[] = [],
-): ReelClip[] {
+  // Instante del drop en TIEMPO DEL REEL: se fuerza un corte exactamente ahí
+  // y se devuelve qué clip arranca en ese corte (para poner al héroe).
+  dropAtSec: number | null = null,
+): { clips: ReelClip[]; dropClipIndex: number | null } {
   const spb = secondsPerBeat(track.bpm);
   const framesPerBeat = spb * FPS;
   const total = clips.length;
@@ -315,11 +341,14 @@ export function beatAlignClips(
 
   // ── Camino de rejilla constante (sin beats medidos) ──
   if (measuredBeats.length < 8) {
-    return plan.map(({ clip, beats, sectionStart }) => ({
-      ...clip,
-      durationInFrames: Math.max(1, Math.round(beats * framesPerBeat)),
-      sectionStart,
-    }));
+    return {
+      clips: plan.map(({ clip, beats, sectionStart }) => ({
+        ...clip,
+        durationInFrames: Math.max(1, Math.round(beats * framesPerBeat)),
+        sectionStart,
+      })),
+      dropClipIndex: null,
+    };
   }
 
   // ── Camino de beats REALES: cortes en los timestamps medidos ──
@@ -330,16 +359,43 @@ export function beatAlignClips(
     idx < grid.length &&
     measuredDownbeats.some((d) => Math.abs(d - grid[idx]) < 1e-3);
 
+  // Beat de la rejilla más cercano al drop (si lo hay).
+  let dropBeatIdx: number | null = null;
+  if (dropAtSec != null) {
+    let bestD = Infinity;
+    grid.forEach((t, i) => {
+      const d = Math.abs(t - dropAtSec);
+      if (d < bestD) {
+        bestD = d;
+        dropBeatIdx = i;
+      }
+    });
+  }
+
   let cutIdx = 0; // índice en `grid` del corte anterior (el reel arranca en t=0)
   let prevFrame = 0;
-  return plan.map(({ clip, beats, sectionStart }, i) => {
+  let dropClipIndex: number | null = null;
+  const aligned = plan.map(({ clip, beats, sectionStart }, i) => {
     let k = cutIdx + beats;
-    // Si el SIGUIENTE clip abre sección, movemos este corte ±1 beat para que la
-    // sección nueva entre en un downbeat (donde el compás "cae").
-    const next = plan[i + 1];
-    if (next?.sectionStart && !isDownbeat(k)) {
-      if (isDownbeat(k + 1)) k += 1;
-      else if (isDownbeat(k - 1) && k - 1 > cutIdx) k -= 1;
+    // Drop: si este corte pasaría cerca del beat del drop, lo CLAVAMOS ahí —
+    // el clip siguiente (el héroe) entra exactamente cuando la música cae.
+    if (
+      dropBeatIdx != null &&
+      dropClipIndex == null &&
+      cutIdx < dropBeatIdx &&
+      k >= dropBeatIdx - 1 &&
+      i < plan.length - 1
+    ) {
+      k = dropBeatIdx;
+      dropClipIndex = i + 1;
+    } else {
+      // Si el SIGUIENTE clip abre sección, movemos este corte ±1 beat para que
+      // la sección nueva entre en un downbeat (donde el compás "cae").
+      const next = plan[i + 1];
+      if (next?.sectionStart && !isDownbeat(k)) {
+        if (isDownbeat(k + 1)) k += 1;
+        else if (isDownbeat(k - 1) && k - 1 > cutIdx) k -= 1;
+      }
     }
     k = Math.min(k, grid.length - 1);
     // Redondeamos el FRAME ACUMULADO del corte (no la duración): así el error
@@ -350,4 +406,5 @@ export function beatAlignClips(
     prevFrame = cutFrame;
     return { ...clip, durationInFrames, sectionStart };
   });
+  return { clips: aligned, dropClipIndex };
 }

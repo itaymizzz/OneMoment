@@ -14,7 +14,12 @@ import path from "path";
 import { promises as fs } from "fs";
 import { bundle } from "@remotion/bundler";
 import { selectComposition, renderMedia, ensureBrowser } from "@remotion/renderer";
-import { beatAlignClips, reelClipBudget, type Track } from "../lib/music";
+import {
+  beatAlignClips,
+  reelClipBudget,
+  planAudioForDrop,
+  type Track,
+} from "../lib/music";
 import { FPS, totalDurationInFrames, type ReelClip } from "../remotion/types";
 
 // ── REAL beat grid from the licensed library: the production path reads the
@@ -27,11 +32,17 @@ const beatJson = JSON.parse(
     path.join(process.cwd(), "public", "music", "beats", `${TRACK_ID}.json`),
     "utf8",
   ),
-) as { bpm: number; beats: number[]; downbeats: number[]; beatOffsetSec: number };
+) as {
+  bpm: number;
+  beats: number[];
+  downbeats: number[];
+  beatOffsetSec: number;
+  dropSec?: number | null;
+};
 const BPM = beatJson.bpm;
-const OFFSET = beatJson.beatOffsetSec;
-const beats = beatJson.beats;
-const downbeats = beatJson.downbeats;
+let OFFSET = beatJson.beatOffsetSec;
+let beats = beatJson.beats;
+let downbeats = beatJson.downbeats;
 
 // ── 18 shots (reel maxClips), hook-first like production route.ts ──
 // [seed, label, orientation, focalX, focalY]
@@ -93,8 +104,35 @@ const track: Track = {
   energy: "upbeat",
 };
 
-// THE call under test: production alignment on the measured grid.
-const clips = beatAlignClips(rawClips, track, beats, downbeats);
+// ── Drop planning, exactly like production: shift the audio so the track's
+// drop lands at the reel's climax, then force a cut there.
+const approxReelSec =
+  (kept.reduce((a) => a + 2.9, 0) * 60) / BPM; // arc ≈2.9 beats/clip
+const { audioStartSec, dropAtSec } = planAudioForDrop(
+  beatJson.dropSec ?? null,
+  approxReelSec,
+);
+if (audioStartSec > 0) {
+  beats = beats.map((t) => t - audioStartSec).filter((t) => t >= 0);
+  downbeats = downbeats.map((t) => t - audioStartSec).filter((t) => t >= 0);
+  OFFSET = beats[0] ?? 0;
+  track.beatOffsetSec = OFFSET;
+}
+console.log(
+  `[drop] track drop=${beatJson.dropSec?.toFixed(1)}s → audioStart=${audioStartSec.toFixed(1)}s, drop lands at ${dropAtSec?.toFixed(1)}s of the reel`,
+);
+
+// THE call under test: production alignment on the measured grid + drop.
+const { clips, dropClipIndex } = beatAlignClips(
+  rawClips,
+  track,
+  beats,
+  downbeats,
+  dropAtSec,
+);
+console.log(
+  `[drop] hero slot: clip #${dropClipIndex} starts exactly on the drop cut`,
+);
 
 // ── Structural verification: does every cut land on a measured beat? ──
 let cursor = 0;
@@ -123,6 +161,7 @@ const inputProps = {
   musicCredit: "Música: Kevin MacLeod (incompetech.com) · CC BY 4.0",
   clips,
   audioUrl: null, // audio doesn't affect the frames we score
+  audioStartSec,
   bpm: BPM,
   beatOffsetSec: OFFSET,
   beats,

@@ -32,6 +32,7 @@ async function main() {
       continue;
     }
     let { bpm, beats, downbeats, beatOffsetSec } = r;
+    const dropSec = r.dropSec;
     // Tempo doble → mitad: un beat sí, un beat no; downbeat cada 4 del nuevo grid.
     if (bpm > 130) {
       bpm = bpm / 2;
@@ -47,9 +48,13 @@ async function main() {
     }
     writeFileSync(
       path.join(OUT_DIR, `${id}.json`),
-      JSON.stringify({ bpm, beats, downbeats, beatOffsetSec }),
+      JSON.stringify({ bpm, beats, downbeats, beatOffsetSec, dropSec }),
     );
-    console.log(`${id}: bpm=${rounded} beats=${beats.length} downbeats=${downbeats.length}`);
+    console.log(
+      `${id}: bpm=${rounded} beats=${beats.length} downbeats=${downbeats.length} drop=${
+        dropSec != null ? dropSec.toFixed(1) + "s" : "—"
+      }`,
+    );
   }
 }
 

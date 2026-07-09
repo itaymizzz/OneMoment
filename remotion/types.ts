@@ -38,6 +38,9 @@ export const reelPropsSchema = z.object({
   // Crédito de la música (obligatorio con pistas CC BY); "" = no se muestra.
   musicCredit: z.string().default(""),
   audioUrl: z.string().nullable().default(null),
+  // La pista arranca desde este segundo (para que su drop caiga en el clímax
+  // del reel). Los beats/downbeats de abajo ya vienen desplazados acorde.
+  audioStartSec: z.number().min(0).default(0),
   // ── Sincronía musical ──
   // BPM del track y desfase del primer beat (seg). Con esto la edición "late"
   // con la música: los clips duran un número entero de beats y la imagen pulsa

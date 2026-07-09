@@ -27,6 +27,9 @@ export type LocalBeatInfo = {
   beats: number[]; // segundos
   downbeats: number[]; // segundos (cada ~4º beat, el golpe fuerte del compás)
   beatOffsetSec: number; // = beats[0] (para el pulso de Remotion)
+  // El "drop"/estribillo: el downbeat donde la energía sostenida pega el mayor
+  // salto (el momento que la edición debe celebrar). null si no hay uno claro.
+  dropSec: number | null;
   source: "local";
 };
 
@@ -200,6 +203,86 @@ function estimatePhase(env: Float32Array, periodFrames: number): number {
   return bestOffset;
 }
 
+// Volumen (RMS) por frame de análisis: el drop es un salto SOSTENIDO de
+// energía, no un ataque puntual — por eso se mide loudness, no onsets.
+function rmsEnvelope(pcm: Float32Array): Float32Array {
+  const numFrames = Math.max(0, Math.floor((pcm.length - FFT_SIZE) / HOP));
+  const out = new Float32Array(numFrames);
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * HOP;
+    let sum = 0;
+    for (let i = 0; i < FFT_SIZE; i += 4) {
+      const s = pcm[start + i];
+      sum += s * s;
+    }
+    out[f] = Math.sqrt(sum / (FFT_SIZE / 4));
+  }
+  return out;
+}
+
+// El drop: el downbeat donde la energía media de los 2 compases SIGUIENTES
+// supera con más diferencia a la de los 2 ANTERIORES. Se busca entre el 10% y
+// el 75% del tramo analizado (ni el fade-in ni el final). El umbral es suave
+// (>10% del rango dinámico): en música orquestal/acústica el "drop" es la
+// entrada del estribillo, no un drop de EDM.
+function detectDrop(
+  rms: Float32Array,
+  onset: Float32Array,
+  downbeats: number[],
+  barFrames: number,
+): number | null {
+  if (downbeats.length < 6) return null;
+  const meanRange = (env: Float32Array, a: number, b: number) => {
+    const from = Math.max(0, Math.floor(a));
+    const to = Math.min(env.length, Math.ceil(b));
+    if (to <= from) return 0;
+    let s = 0;
+    for (let i = from; i < to; i++) s += env[i];
+    return s / (to - from);
+  };
+  let lo = Infinity;
+  let hi = 0;
+  for (let i = 0; i < rms.length; i++) {
+    if (rms[i] < lo) lo = rms[i];
+    if (rms[i] > hi) hi = rms[i];
+  }
+  const range = hi - lo;
+  if (range <= 0) return null;
+
+  const tMin = (rms.length / FRAME_RATE) * 0.1;
+  const tMax = (rms.length / FRAME_RATE) * 0.75;
+  let best: number | null = null;
+  let bestScore = 0;
+  for (const t of downbeats) {
+    if (t < tMin || t > tMax) continue;
+    const f = t * FRAME_RATE;
+    const before = meanRange(rms, f - 2 * barFrames, f);
+    const after = meanRange(rms, f, f + 2 * barFrames);
+    const score = after - before;
+    if (score > bestScore) {
+      bestScore = score;
+      best = t;
+    }
+  }
+  if (best != null && bestScore > range * 0.1) return best;
+
+  // Pistas de energía constante (groove estable): no hay salto sostenido, así
+  // que el "momento" es el compás con la entrada MÁS ACENTUADA (pico de
+  // onsets) en el tramo central. Siempre existe: todo reel gana su clímax.
+  let peak: number | null = null;
+  let peakScore = -Infinity;
+  for (const t of downbeats) {
+    if (t < tMin || t > tMax) continue;
+    const f = t * FRAME_RATE;
+    const score = meanRange(onset, f, f + barFrames);
+    if (score > peakScore) {
+      peakScore = score;
+      peak = t;
+    }
+  }
+  return peak;
+}
+
 export async function detectBeatsLocal(
   absAudioPath: string,
 ): Promise<LocalBeatInfo | null> {
@@ -239,11 +322,17 @@ export async function detectBeatsLocal(
     }
     const downbeats = beats.filter((_, idx) => idx % 4 === downPhase);
 
+    // Drop/estribillo: salto sostenido de volumen en un downbeat (o, en pistas
+    // de energía constante, el compás más acentuado del tramo central).
+    const rms = rmsEnvelope(pcm);
+    const dropSec = detectDrop(rms, env, downbeats, period * 4);
+
     return {
       bpm: Math.round(bpm * 10) / 10,
       beats,
       downbeats,
       beatOffsetSec: beats[0] ?? 0,
+      dropSec,
       source: "local",
     };
   } catch {
