@@ -145,6 +145,44 @@ access). Free tier (10 GB) covers the first months entirely.
 
 ---
 
+## 5b. ALL-IN cost per event (fixed costs amortized + 12-month storage)
+
+The §3 table is the marginal cost in the event's first month. This one answers
+"what does ONE event truly cost me, all-in?": variable cost + a share of the
+monthly fixed costs (assuming 10 events/month → $15/10 = $1.50/event) + storage
+kept for 12 months.
+
+**Today's pipeline:**
+
+| | 100 uploads | 300 uploads | 800 uploads |
+|---|---|---|---|
+| Variable (§3, incl. 1st-month storage) | $9.90 | $23.40 | $57.90 |
+| Fixed share | $1.50 | $1.50 | $1.50 |
+| Storage months 2–12 on Railway ($0.15/GB) | $3.63 | $10.73 | $28.05 |
+| **All-in per event** | **$15.03** | **$35.63** | **$87.45** |
+| Margin @ $39 / $79 | 61% / 81% | **9% / 55%** | loss / **loss** |
+
+Storage is the silent second bill: keeping a 300-upload wedding for a year on
+the Railway volume costs **$11.70 — half of what the AI cost**. At $39 the
+all-in margin today is 9%.
+
+**After the fixes (curate-once + Haiku + R2 after 30 days):**
+
+| | 100 uploads | 300 uploads | 800 uploads |
+|---|---|---|---|
+| Variable | $1.50 | $2.90 | $6.60 |
+| Fixed share | $1.50 | $1.50 | $1.50 |
+| Storage months 2–12 on R2 ($0.015/GB) | $0.36 | $1.07 | $2.81 |
+| **All-in per event** | **$3.36** | **$5.47** | **$10.91** |
+| Margin @ $39 / $79 | 91% / 96% | **86% / 93%** | 72% / 86% |
+
+Alternative to R2 if you'd rather not build it yet: **delete media 90 days
+after the event** (organizer gets a "download everything" reminder email
+first). Storage months 2–3 only: $1.95 for a 300-upload event → all-in $28.35
+today / $6.35 after the AI fixes.
+
+---
+
 ## 6. Top 3 cost optimizations, ranked by savings
 
 1. **Stop re-analyzing the same photos (curate-once).** Persist "curated" on
