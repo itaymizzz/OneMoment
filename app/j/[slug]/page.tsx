@@ -42,7 +42,8 @@ export default async function JoinPage({
         <Uploader eventId={event.id} eventName={event.name} />
 
         <p className="eyebrow mt-10 text-center">
-          {event._count.media} momentos capturados
+          {event._count.media}{" "}
+          {event._count.media === 1 ? "momento capturado" : "momentos capturados"}
         </p>
       </div>
     </main>

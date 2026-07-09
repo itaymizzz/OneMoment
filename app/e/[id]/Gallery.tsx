@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Media, MOMENTS, MOMENT_LABEL } from "@/lib/types";
+import { Media, MOMENTS } from "@/lib/types";
 import {
   DownloadIcon,
   PlayIcon,

@@ -65,7 +65,7 @@ export default function PackagePanel({
       if (!res.ok || !data?.url) {
         throw new Error(data?.error || "No se pudo iniciar el pago");
       }
-      window.location.href = data.url;
+      window.location.assign(data.url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
       setBusy(null);

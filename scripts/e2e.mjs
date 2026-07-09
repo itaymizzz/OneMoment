@@ -24,19 +24,22 @@ async function flatDarkJpeg() {
     .toBuffer();
 }
 
+// El procesado y el render son ahora SOLO del dueño (fix de seguridad C3):
+// guardamos la cookie de organizador que devuelve la creación del evento.
+let ownerCookie = "";
 async function jpost(url, body) {
   const r = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", cookie: ownerCookie },
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(`${url} -> ${r.status} ${await r.text()}`);
   return r.json();
 }
 
-async function upload(eventId, guestId, name, buf) {
+async function upload(eventId, guestToken, name, buf) {
   const fd = new FormData();
-  fd.append("guestId", guestId);
+  fd.append("guestToken", guestToken);
   fd.append("files", new Blob([buf], { type: "image/jpeg" }), name);
   const r = await fetch(`${BASE}/api/events/${eventId}/media`, { method: "POST", body: fd });
   if (!r.ok) throw new Error(`upload -> ${r.status} ${await r.text()}`);
@@ -44,11 +47,14 @@ async function upload(eventId, guestId, name, buf) {
 }
 
 console.log("→ creando evento…");
-const ev = await jpost(`${BASE}/api/events`, {
-  name: "Boda de Barak & Sofía",
-  type: "wedding",
-  hostName: "OneMoment",
+const createRes = await fetch(`${BASE}/api/events`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "Boda de Barak & Sofía", type: "wedding", hostName: "OneMoment" }),
 });
+if (!createRes.ok) throw new Error(`create -> ${createRes.status}`);
+ownerCookie = createRes.headers.get("set-cookie")?.split(";")[0] ?? "";
+const ev = await createRes.json();
 console.log("  evento:", ev.id, "slug:", ev.slug);
 
 const guest = await jpost(`${BASE}/api/events/${ev.id}/guests`, { name: "Invitada Demo" });
@@ -64,7 +70,7 @@ const photos = [
   ["foto-oscura.jpg", await flatDarkJpeg()], // mala exposición / poca nitidez
 ];
 console.log("→ subiendo", photos.length, "fotos…");
-for (const [name, buf] of photos) await upload(ev.id, guest.guestId, name, buf);
+for (const [name, buf] of photos) await upload(ev.id, guest.token, name, buf);
 
 console.log("→ procesando con IA…");
 const proc = await jpost(`${BASE}/api/events/${ev.id}/process`, {});

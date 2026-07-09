@@ -218,7 +218,7 @@ export default function PhotoWall({
           <p className="mt-1 text-sm text-[#f2ede3]">Suma tus fotos</p>
           {wallCounter && (
             <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/50">
-              {count} momentos capturados
+              {count} {count === 1 ? "momento capturado" : "momentos capturados"}
             </p>
           )}
         </div>
