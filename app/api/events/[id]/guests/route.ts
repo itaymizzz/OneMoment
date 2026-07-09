@@ -19,7 +19,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  if (!rateLimit(`guestget:${clientIp(req)}`, 60, 60 * 1000)) {
+  // Por IP alto: a la hora de entrada del evento, decenas de invitados
+  // rehidratan a la vez desde la misma IP del venue.
+  if (!rateLimit(`guestget:${clientIp(req)}`, 300, 60 * 1000)) {
     return NextResponse.json({ error: "Demasiadas solicitudes." }, { status: 429 });
   }
   const token = new URL(req.url).searchParams.get("token");
@@ -45,7 +47,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  if (!rateLimit(`guest:${clientIp(req)}`, 60, 60 * 60 * 1000)) {
+  // 600/hora por IP: una boda de 300 invitados uniéndose desde el WiFi del
+  // venue cabe con margen; un bot que crea invitados en bucle no.
+  if (!rateLimit(`guest:${clientIp(req)}`, 600, 60 * 60 * 1000)) {
     return NextResponse.json({ error: "Demasiadas solicitudes." }, { status: 429 });
   }
   const body = await req.json().catch(() => null);

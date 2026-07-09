@@ -48,9 +48,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  // El muro y la galería sondean cada ~4s (15/min por pantalla): 120/min por IP
-  // deja margen de sobra y corta el scraping/martilleo.
-  if (!rateLimit(`medialist:${clientIp(req)}`, 120, 60 * 1000)) {
+  // Techo por IP alto a propósito: en el venue TODOS comparten la IP del WiFi
+  // (muro + organizador + los "mis fotos" de decenas de invitados a la vez).
+  if (!rateLimit(`medialist:${clientIp(req)}`, 1000, 60 * 1000)) {
     return NextResponse.json({ error: "Demasiadas peticiones" }, { status: 429 });
   }
 
@@ -79,14 +79,18 @@ export async function GET(
   return NextResponse.json({ media });
 }
 
-// Subida de invitados: multipart con campo `guestId` (opcional) y uno o más `files`.
+// Subida de invitados: multipart con campo `guestToken` (o `guestId` legado)
+// y uno o más `files`.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  // Anti-abuso: un invitado (o un bot) no debe poder inundar el almacenamiento.
-  if (!rateLimit(`upload:${clientIp(req)}`, 300, 60 * 60 * 1000)) {
+  // Techo por IP MUY alto: en un salón real TODOS los invitados comparten la
+  // IP pública del WiFi del venue — un límite por IP normal bloquearía a toda
+  // la boda a mitad de fiesta. Esto sólo frena una inundación de un solo actor;
+  // el límite real es POR INVITADO (más abajo, cuando ya sabemos quién es).
+  if (!rateLimit(`upload-ip:${clientIp(req)}`, 2000, 60 * 60 * 1000)) {
     return NextResponse.json({ error: "Demasiadas subidas. Espera un momento." }, { status: 429 });
   }
   const event = await prisma.event.findUnique({ where: { id }, select: { id: true } });
@@ -119,6 +123,19 @@ export async function POST(
       select: { id: true },
     });
     guestId = guest?.id ?? null;
+  }
+
+  // Límite REAL, por invitado (su token es único aunque compartan IP): 500
+  // archivos/hora por persona es más que cualquier boda. Subidas sin identidad
+  // (raras) sí quedan atadas a la IP, más estrictas.
+  const perGuestKey = guestId
+    ? `upload-guest:${guestId}`
+    : `upload-anon:${clientIp(req)}`;
+  if (!rateLimit(perGuestKey, guestId ? 500 : 300, 60 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Demasiadas subidas. Espera un momento." },
+      { status: 429 },
+    );
   }
 
   const allFiles = form.getAll("files").filter((f): f is File => f instanceof File);
