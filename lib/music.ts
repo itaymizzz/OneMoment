@@ -134,6 +134,18 @@ export function pickTrack(
   return pick[idx];
 }
 
+// Presupuesto de clips del REEL según el tempo de la pista: el arco consume
+// ~2.9 beats/clip de media, así que con una canción lenta hay que montar menos
+// planos para que el reel siga cayendo en los 25–35s del spec (a 128 BPM caben
+// ~20 clips; a 96, ~17; a 81, ~14).
+export function reelClipBudget(bpm: number, maxClips: number): number {
+  const TARGET_SEC = 30;
+  const AVG_BEATS_PER_CLIP = 2.9;
+  const spb = secondsPerBeat(bpm);
+  const clips = Math.round(TARGET_SEC / spb / AVG_BEATS_PER_CLIP);
+  return Math.max(10, Math.min(maxClips, clips));
+}
+
 // ── Análisis de beats con caché ─────────────────────────────────────────────
 // 1) public/music/beats/<id>.json — precomputado y versionado (analyze-tracks).
 // 2) STORAGE_ROOT/beat-cache/<id>.json — caché en runtime (pistas nuevas sin
@@ -310,7 +322,7 @@ export function beatAlignClips(
     measuredDownbeats.some((d) => Math.abs(d - grid[idx]) < 1e-3);
 
   let cutIdx = 0; // índice en `grid` del corte anterior (el reel arranca en t=0)
-  let tPrev = 0;
+  let prevFrame = 0;
   return plan.map(({ clip, beats, sectionStart }, i) => {
     let k = cutIdx + beats;
     // Si el SIGUIENTE clip abre sección, movemos este corte ±1 beat para que la
@@ -321,12 +333,12 @@ export function beatAlignClips(
       else if (isDownbeat(k - 1) && k - 1 > cutIdx) k -= 1;
     }
     k = Math.min(k, grid.length - 1);
-    // Último clip: su fin no es un corte (entra el outro en crossfade), pero
-    // mantenemos la duración del arco medida sobre la rejilla real.
-    const tCut = grid[k];
-    const durationInFrames = Math.max(1, Math.round((tCut - tPrev) * FPS));
+    // Redondeamos el FRAME ACUMULADO del corte (no la duración): así el error
+    // de redondeo no se arrastra y cada corte queda a ≤½ frame del beat real.
+    const cutFrame = Math.round(grid[k] * FPS);
+    const durationInFrames = Math.max(1, cutFrame - prevFrame);
     cutIdx = k;
-    tPrev = tCut;
+    prevFrame = cutFrame;
     return { ...clip, durationInFrames, sectionStart };
   });
 }

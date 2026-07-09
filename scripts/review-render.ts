@@ -14,21 +14,24 @@ import path from "path";
 import { promises as fs } from "fs";
 import { bundle } from "@remotion/bundler";
 import { selectComposition, renderMedia, ensureBrowser } from "@remotion/renderer";
-import { beatAlignClips, type Track } from "../lib/music";
+import { beatAlignClips, reelClipBudget, type Track } from "../lib/music";
 import { FPS, totalDurationInFrames, type ReelClip } from "../remotion/types";
 
-// ── Synthetic MEASURED beat grid: 128 BPM with ±2.5% tempo drift + offset ──
-// (a constant-BPM grid would not prove cuts follow the real timestamps)
-const BPM = 128;
-const OFFSET = 0.35;
-const beats: number[] = [];
-let t = OFFSET;
-for (let i = 0; beats.length < 220; i++) {
-  beats.push(t);
-  const drift = 1 + 0.025 * Math.sin(i / 7); // breathing tempo
-  t += (60 / BPM) * drift;
-}
-const downbeats = beats.filter((_, i) => i % 4 === 0);
+// ── REAL beat grid from the licensed library: the production path reads the
+// precomputed analysis JSON (public/music/beats/<id>.json), so the review
+// render proves the exact same data a real render uses.
+import { readFileSync } from "fs";
+const TRACK_ID = "fiesta-96-carefree"; // reel default vibe = fiesta
+const beatJson = JSON.parse(
+  readFileSync(
+    path.join(process.cwd(), "public", "music", "beats", `${TRACK_ID}.json`),
+    "utf8",
+  ),
+) as { bpm: number; beats: number[]; downbeats: number[]; beatOffsetSec: number };
+const BPM = beatJson.bpm;
+const OFFSET = beatJson.beatOffsetSec;
+const beats = beatJson.beats;
+const downbeats = beatJson.downbeats;
 
 // ── 18 shots (reel maxClips), hook-first like production route.ts ──
 // [seed, label, orientation, focalX, focalY]
@@ -56,7 +59,16 @@ const shots: Shot[] = [
   ["fin-a", "Cierre", "l", 0.5, 0.35],            // closing shot, held long
 ];
 
-const rawClips: ReelClip[] = shots.map(([seed, label, o, fx, fy], i) => {
+// Presupuesto de clips según el tempo real (como producción): con 96 BPM caben
+// menos planos que con 128 para que el reel siga en 25–35s. Conservamos el
+// gancho (primero) y el plano de cierre (último).
+const budget = reelClipBudget(96, shots.length);
+const kept: Shot[] =
+  budget >= shots.length
+    ? shots
+    : [...shots.slice(0, budget - 1), shots[shots.length - 1]];
+
+const rawClips: ReelClip[] = kept.map(([seed, label, o, fx, fy], i) => {
   const w = o === "p" ? 1080 : 1920;
   const h = o === "p" ? 1920 : 1080;
   return {
@@ -72,9 +84,9 @@ const rawClips: ReelClip[] = shots.map(([seed, label, o, fx, fy], i) => {
 });
 
 const track: Track = {
-  id: "review-synthetic",
-  title: "Review",
-  file: "/music/fiesta-96-carefree.mp3",
+  id: TRACK_ID,
+  title: "Carefree",
+  file: `/music/${TRACK_ID}.mp3`,
   bpm: BPM,
   beatOffsetSec: OFFSET,
   vibe: "fiesta",

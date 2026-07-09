@@ -7,7 +7,13 @@ import { processEvent } from "@/lib/process";
 import { ensureReelsDir, readMedia, saveBuffer, mediaPath } from "@/lib/storage";
 import { renderReel } from "@/lib/render";
 import { MOMENTS, MOMENT_LABEL } from "@/lib/types";
-import { pickTrack, beatAlignClips, loadTrackBeats, isVibe } from "@/lib/music";
+import {
+  pickTrack,
+  beatAlignClips,
+  loadTrackBeats,
+  isVibe,
+  reelClipBudget,
+} from "@/lib/music";
 import { normalizePhoto, enhancedName } from "@/lib/ai/normalize";
 import {
   enhanceVideo,
@@ -115,9 +121,35 @@ export async function POST(
     }
   }
 
+  // ── Música: biblioteca LICENCIADA (nada generado por IA — editamos momentos
+  // reales). El organizador puede elegir vibe o pista concreta desde el panel;
+  // sin elección, auto-pick determinista según el formato. Se elige ANTES de
+  // recortar los clips porque el tempo manda sobre cuántos planos caben.
+  const music = {
+    vibe: isVibe(body?.music?.vibe) ? body.music.vibe : null,
+    trackId:
+      typeof body?.music?.trackId === "string" ? body.music.trackId : null,
+  };
+  let track = pickTrack(format, id, music);
+
+  // Beats REALES desde el análisis precomputado por pista (JSON versionado);
+  // si la pista es nueva y no tiene análisis, se mide una vez y se cachea.
+  let realBeats: number[] = [];
+  let realDownbeats: number[] = [];
+  const tb = await loadTrackBeats(track);
+  if (tb) {
+    realBeats = tb.beats;
+    realDownbeats = tb.downbeats;
+    track = { ...track, bpm: tb.bpm, beatOffsetSec: tb.beatOffsetSec };
+  }
+
   // Fuente: el "mejor de" seleccionado por la IA; si no hay, usamos lo no
   // borroso / no duplicado mejor puntuado.
-  const cfg = FORMAT_CFG[format];
+  const cfg = { ...FORMAT_CFG[format] };
+  if (format === "reel") {
+    // Con música lenta caben menos planos en los ~30s del spec.
+    cfg.maxClips = reelClipBudget(track.bpm, cfg.maxClips);
+  }
   let media = await prisma.mediaItem.findMany({
     where: {
       eventId: id,
@@ -253,27 +285,6 @@ export async function POST(
       sectionStart: false, // lo fija beatAlignClips según el cambio de momento
     } as ReelClip;
   });
-
-  // ── Música: biblioteca LICENCIADA (nada generado por IA — editamos momentos
-  // reales). El organizador puede elegir vibe o pista concreta desde el panel;
-  // sin elección, auto-pick determinista según el formato.
-  const music = {
-    vibe: isVibe(body?.music?.vibe) ? body.music.vibe : null,
-    trackId:
-      typeof body?.music?.trackId === "string" ? body.music.trackId : null,
-  };
-  let track = pickTrack(format, id, music);
-
-  // Beats REALES desde el análisis precomputado por pista (JSON versionado);
-  // si la pista es nueva y no tiene análisis, se mide una vez y se cachea.
-  let realBeats: number[] = [];
-  let realDownbeats: number[] = [];
-  const tb = await loadTrackBeats(track);
-  if (tb) {
-    realBeats = tb.beats;
-    realDownbeats = tb.downbeats;
-    track = { ...track, bpm: tb.bpm, beatOffsetSec: tb.beatOffsetSec };
-  }
 
   // Ajustamos las duraciones de los clips para que los cortes caigan en los
   // beats MEDIDOS del audio (si los hay); si no, en la rejilla de BPM constante.
