@@ -96,6 +96,7 @@ model MediaItem {
   faceCount    Int     @default(0)
   focalX       Float? // centro de interés 0..1 (caras) para el encuadre 9:16
   focalY       Float?
+  curatedAt    DateTime? // cuándo pasó por la curación IA de pago — NUNCA se repite
   caption      String? // descripción generada por IA
   selected     Boolean @default(false) // entró en el "mejor de"
 

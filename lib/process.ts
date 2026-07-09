@@ -97,6 +97,12 @@ type Work = {
   videoDurationS: number | null;
   videoW: number | null;
   videoH: number | null;
+  // Estado previo (fotos ya puntuadas en pasadas anteriores): su calidad y su
+  // borrosidad guardadas MANDAN — no se recalculan con métricas degeneradas.
+  storedQuality: number | null;
+  storedBlurry: boolean;
+  // ¿Ya pasó por la curación IA de pago? Entonces NUNCA se vuelve a pagar.
+  curated: boolean;
   // Anulación manual del dueño (gana sobre la IA).
   pinned: boolean;
   hidden: boolean;
@@ -151,6 +157,9 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
       videoDurationS: it.durationS ?? null,
       videoW: it.kind === "video" ? it.width ?? null : null,
       videoH: it.kind === "video" ? it.height ?? null : null,
+      storedQuality: it.qualityScore ?? null,
+      storedBlurry: it.isBlurry,
+      curated: it.curatedAt != null,
       pinned: it.pinned,
       hidden: it.hidden,
     });
@@ -184,7 +193,15 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
       quality.set(w.id, 0.3);
       continue;
     }
-    // Si reusamos métricas (sin sharpness), conservamos calidad previa más abajo.
+    // Foto ya puntuada en una pasada anterior (métricas reusadas, sharpness=0):
+    // manda lo GUARDADO. Antes se recalculaba con métricas degeneradas — la
+    // calidad en memoria salía ~0.3 y el "mejor de" castigaba injustamente a
+    // las fotos viejas, y su isBlurry guardado se borraba en cada pasada.
+    if (m.sharpness === 0 && w.storedQuality != null) {
+      quality.set(w.id, w.storedQuality);
+      if (w.storedBlurry) blurry.add(w.id);
+      continue;
+    }
     const sharpScore = clamp01(m.sharpness / (median > 0 ? median * 1.5 : 1));
     const resScore = clamp01(Math.min(m.width, m.height) / 1080);
     const expScore = 1 - exposurePenalty(m.brightness);
@@ -198,16 +215,20 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
   }
 
   // ── Curación IA opcional (Claude visión + AWS caras) ──
-  // Sólo si hay claves. Para acotar costo, curamos los mejores candidatos por
-  // calidad técnica (top N) y mezclamos la estética/emoción en su puntuación.
+  // Sólo si hay claves. CADA FOTO SE PAGA UNA SOLA VEZ (curatedAt): las
+  // pasadas siguientes saltan lo ya curado — antes se re-enviaban las top-60
+  // en cada pasada y una boda de 300 fotos costaba 3–15× de más. Además la
+  // foto se reduce a 1568px antes de enviarse: mismo juicio estético, ~3×
+  // menos tokens de visión.
   const aiMoment = new Map<string, string>();
   const aiFaces = new Map<string, { faces: number; smile: boolean }>();
   const aiFocal = new Map<string, { x: number; y: number }>();
+  const curatedNow = new Set<string>();
   if (ai.anthropic || ai.aws) {
     const fileOf = new Map(items.map((it) => [it.id, it.filename]));
     const CURATE_MAX = Number(process.env.AI_CURATE_MAX || 60);
     const candidates = work
-      .filter((w) => w.kind === "photo" && !blurry.has(w.id))
+      .filter((w) => w.kind === "photo" && !blurry.has(w.id) && !w.curated)
       .sort((a, b) => (quality.get(b.id) ?? 0) - (quality.get(a.id) ?? 0))
       .slice(0, CURATE_MAX);
 
@@ -216,7 +237,14 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
       if (!filename) continue;
       try {
         const buf = await readMedia(eventId, filename);
-        const score = await curatePhoto(buf);
+        // 1568px es el máximo útil para el modelo de visión: enviar la foto
+        // original de 12MP sólo multiplica tokens, no criterio.
+        const small = await sharp(buf)
+          .resize(1568, 1568, { fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 82 })
+          .toBuffer();
+        const score = await curatePhoto(small);
+        curatedNow.add(w.id); // se intentó: no volver a pagar por esta foto
         if (!score) continue;
         let q = clamp01(0.45 * (quality.get(w.id) ?? 0) + 0.55 * score.aesthetic);
         if (!score.eyesOpen) q *= 0.6; // penaliza ojos cerrados
@@ -315,8 +343,11 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
       where: { id: w.id },
       data: {
         status: "scored",
-        // Si reusamos métricas, no pisamos la calidad ya calculada.
-        ...(reused ? {} : { qualityScore: quality.get(w.id) ?? null }),
+        // Si reusamos métricas, no pisamos la calidad ya calculada — salvo que
+        // esta pasada la haya curado la IA (entonces la calidad mezclada manda).
+        ...(reused && !curatedNow.has(w.id)
+          ? {}
+          : { qualityScore: quality.get(w.id) ?? null }),
         isBlurry: finalBlurry,
         isDuplicate: finalDuplicate,
         dupGroup: groupOf.get(w.id) ?? null,
@@ -332,6 +363,8 @@ export async function processEvent(eventId: string): Promise<{ scored: number }>
         ...(aiFocal.has(w.id)
           ? { focalX: aiFocal.get(w.id)!.x, focalY: aiFocal.get(w.id)!.y }
           : {}),
+        // Marca de curación pagada: esta foto no vuelve a enviarse a la IA.
+        ...(curatedNow.has(w.id) ? { curatedAt: new Date() } : {}),
         ...(m ? { width: m.width || null, height: m.height || null } : {}),
         caption: (() => {
           // Etiqueta preferida: la del momento detectado por IA, si existe.
