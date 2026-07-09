@@ -47,3 +47,7 @@ next-env.d.ts
 
 # Attack map for the live unauthenticated app — keep LOCAL until security fixes land
 docs/SECURITY_AUDIT.md
+
+# cookie jars de pruebas locales
+*.txt.cookiejar
+aj.txt

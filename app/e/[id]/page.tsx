@@ -13,6 +13,7 @@ import NotifyEmail from "./NotifyEmail";
 import { headers } from "next/headers";
 import { baseUrl } from "@/lib/base-url";
 import { ownerCookieName, tokenMatches, sessionOwnsEvent } from "@/lib/owner";
+import { getTracks, VIBES } from "@/lib/music";
 
 export const dynamic = "force-dynamic";
 
@@ -149,7 +150,18 @@ export default async function EventDashboard({
 
           {/* Estudio de IA + galería */}
           <div className="space-y-6">
-            <ReelStudio eventId={event.id} />
+            <ReelStudio
+              eventId={event.id}
+              music={{
+                vibes: VIBES,
+                tracks: getTracks().map((t) => ({
+                  id: t.id,
+                  title: t.title,
+                  vibe: t.vibe,
+                  bpm: t.bpm,
+                })),
+              }}
+            />
             <Gallery eventId={event.id} initial={event.media} />
             <DangerZone eventId={event.id} eventName={event.name} />
           </div>

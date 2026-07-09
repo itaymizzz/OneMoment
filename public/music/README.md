@@ -1,51 +1,28 @@
-# Biblioteca de música
+# Biblioteca de música (licenciada)
 
-Suelta aquí las canciones (hechas en Suno Premier, licenciadas, etc.) y la app
-las usará automáticamente — **sin tocar código**. `lib/music.ts` escanea esta
-carpeta en cada render y arma el catálogo.
+Suelta aquí pistas **con licencia** (Artlist, Epidemic Sound, CC BY…) y la app
+las usa automáticamente — sin tocar código. Nada de música generada por IA:
+editamos momentos reales, no generamos contenido.
 
 ## Convención de nombre
 
 ```
-<energy>-<bpm>[-etiqueta].<ext>
+<vibe>-<bpm>[-etiqueta].<ext>
 ```
 
-- **energy**: `calm` | `warm` | `upbeat`
-  - `calm`  → Película (10 min)
-  - `warm`  → Tráiler (3 min)
-  - `upbeat`→ Reel (30s)
-- **bpm**: el BPM **real** del track (número). Pon el que de verdad tenga la
-  canción para que el corte al beat encaje. Si no lo sabes, mídelo en
-  https://tunebat.com o similar.
-- **etiqueta** (opcional): texto libre con guiones, solo para distinguir varias
-  del mismo tipo. Se muestra como título.
-- **ext**: `mp3` | `wav` | `m4a` | `ogg`
+- `vibe` ∈ `romantico` | `fiesta` | `cinematico` | `elegante`
+- `bpm` = BPM real de la pista (el script lo verifica)
+- `ext` ∈ mp3 | wav | m4a | ogg
 
-### Ejemplos
+Ejemplos: `romantico-81-heartwarming.mp3` · `fiesta-96-carefree.mp3`
 
-```
-upbeat-128.mp3
-upbeat-124-neon.mp3
-warm-108-brindis.mp3
-calm-84-primer-baile.wav
-```
+## Al añadir pistas
 
-## Cómo se eligen
+1. Nombra el archivo con la convención y cópialo aquí.
+2. Corre `npx tsx scripts/analyze-tracks.ts` — precomputa los beats en
+   `beats/<id>.json` (los renders leen ese JSON, no analizan audio).
+3. Registra la licencia en `LICENSES.md`.
+4. Commit de los tres (mp3 + json + licencia).
 
-Cada evento recibe **una canción distinta** dentro de su energía (rotación
-determinista por evento): dos bodas suenan diferente, pero el mismo evento
-siempre mantiene su canción. Cuantas más subas, más variedad.
-
-## Consejos para Suno
-
-- Pide **"instrumental, no vocals"** en el prompt.
-- Incluye el **BPM** en el prompt y ponlo también en el nombre del archivo.
-- Que duren de sobra: reel ≥ 40s · tráiler ≥ 3min · película ≥ 4min (si no, se
-  repite en bucle).
-
-## Notas
-
-- `calm-90.wav`, `warm-110.wav`, `upbeat-128.wav` son **beds sintetizados de
-  reserva**. Se usan solo si la carpeta no tiene otras pistas válidas.
-- `generated/` contiene las canciones únicas por evento creadas por IA
-  (sunoapi.org / ElevenLabs) cuando hay clave. No la toques a mano.
+El organizador elige el vibe (o la pista) en el panel del evento; si no elige,
+la app auto-elige: reel→fiesta, tráiler→cinemático, película→romántico.

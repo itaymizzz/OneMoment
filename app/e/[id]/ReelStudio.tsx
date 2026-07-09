@@ -19,6 +19,12 @@ type Reel = {
   createdAt: string;
 };
 
+// Catálogo de música licenciada (lo pasa el servidor desde lib/music.ts).
+export type MusicCatalog = {
+  vibes: { key: string; label: string }[];
+  tracks: { id: string; title: string; vibe: string; bpm: number }[];
+};
+
 const FORMATS: { key: ReelFormat; title: string; desc: string }[] = [
   { key: "reel", title: "Reel", desc: "30s vertical para Instagram, con música y transiciones." },
   { key: "trailer", title: "Tráiler", desc: "Hasta 3 min, montaje cinematográfico." },
@@ -31,10 +37,19 @@ const FORMAT_LABEL: Record<string, string> = {
   film: "Película",
 };
 
-export default function ReelStudio({ eventId }: { eventId: string }) {
+export default function ReelStudio({
+  eventId,
+  music,
+}: {
+  eventId: string;
+  music: MusicCatalog;
+}) {
   const [reels, setReels] = useState<Reel[]>([]);
   const [busy, setBusy] = useState<ReelFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // "" = auto (la app elige según el formato).
+  const [vibe, setVibe] = useState<string>("");
+  const [trackId, setTrackId] = useState<string>("");
 
   useEffect(() => {
     fetch(`/api/events/${eventId}/reels`)
@@ -79,7 +94,10 @@ export default function ReelStudio({ eventId }: { eventId: string }) {
       const res = await fetch(`/api/events/${eventId}/reels`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format }),
+        body: JSON.stringify({
+          format,
+          music: { vibe: vibe || null, trackId: trackId || null },
+        }),
       });
       // El servidor puede devolver texto plano (p.ej. "upstream error" del
       // proxy si el contenedor se quedó sin memoria y se reinició) — parseamos
@@ -123,6 +141,57 @@ export default function ReelStudio({ eventId }: { eventId: string }) {
       <p className="mt-1 text-sm text-muted">
         La IA monta una película con el mejor contenido del evento.
       </p>
+
+      {/* Música: vibe (o pista concreta) de la biblioteca licenciada. */}
+      <div className="mt-4">
+        <p className="text-xs font-medium text-muted">Música</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <button
+            onClick={() => {
+              setVibe("");
+              setTrackId("");
+            }}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              vibe === "" ? "border-accent bg-accent text-black" : "border-border text-muted hover:border-accent"
+            }`}
+          >
+            Auto
+          </button>
+          {music.vibes.map((v) => (
+            <button
+              key={v.key}
+              onClick={() => {
+                setVibe(v.key);
+                setTrackId("");
+              }}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                vibe === v.key
+                  ? "border-accent bg-accent text-black"
+                  : "border-border text-muted hover:border-accent"
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {vibe && (
+          <select
+            value={trackId}
+            onChange={(e) => setTrackId(e.target.value)}
+            className="mt-2 w-full cursor-pointer px-3 py-2 text-xs"
+            aria-label="Pista concreta (opcional)"
+          >
+            <option value="">Cualquiera del vibe (rota por evento)</option>
+            {music.tracks
+              .filter((t) => t.vibe === vibe)
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title} · {t.bpm} BPM
+                </option>
+              ))}
+          </select>
+        )}
+      </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {FORMATS.map((f) => {

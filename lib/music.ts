@@ -4,68 +4,58 @@ import type { ReelClip, ReelFormat } from "../remotion/types";
 import { FPS, secondsPerBeat } from "../remotion/types";
 
 // ───────────────────────────────────────────────────────────────────────────
-// Música + edición sincronizada al beat.
+// Biblioteca de música LICENCIADA + edición sincronizada al beat.
 //
-// Catálogo de pistas (con BPM conocido) y utilidades para "cortar al beat": la
-// duración de cada clip se ajusta a un número entero de beats según la energía
-// de la pista y el formato. Así la película "late" con la música. Las pistas
-// viven en `public/music/` (ver `scripts/gen-music.mjs`); sustituye por música
-// con licencia o generada (Suno / ElevenLabs) manteniendo el mismo formato.
+// Principio de producto: editamos momentos reales, no generamos contenido.
+// Nada de música generada por IA: las pistas son archivos con licencia en
+// `public/music/` (ver LICENSES.md ahí), organizadas por VIBE. El organizador
+// elige el vibe (o una pista concreta) en el panel; si no elige, se auto-elige
+// según el formato. El análisis de beats se precomputa una vez por pista
+// (`scripts/analyze-tracks.ts` → public/music/beats/<id>.json) — cero coste y
+// cero latencia en cada render.
+//
+// Convención de nombre de archivo:
+//     <vibe>-<bpm>[-etiqueta].<ext>
+//   vibe ∈ romantico | fiesta | cinematico | elegante
+//   ext ∈ mp3 | wav | m4a | ogg
+// Suelta aquí pistas de Artlist/Epidemic con ese nombre, corre el script de
+// análisis, y entran al catálogo sin tocar código.
 // ───────────────────────────────────────────────────────────────────────────
 
+export type Vibe = "romantico" | "fiesta" | "cinematico" | "elegante";
+
+export const VIBES: { key: Vibe; label: string }[] = [
+  { key: "romantico", label: "Romántico" },
+  { key: "fiesta", label: "Fiesta" },
+  { key: "cinematico", label: "Cinemático" },
+  { key: "elegante", label: "Elegante" },
+];
+
+export function isVibe(v: unknown): v is Vibe {
+  return typeof v === "string" && VIBES.some((x) => x.key === v);
+}
+
+// El "arco" de ritmo (beatsForClip) trabaja en términos de energía.
 export type Energy = "calm" | "warm" | "upbeat";
+const ENERGY_BY_VIBE: Record<Vibe, Energy> = {
+  romantico: "calm",
+  elegante: "calm",
+  cinematico: "warm",
+  fiesta: "upbeat",
+};
 
 export type Track = {
   id: string;
   title: string;
-  file: string; // relativo a /public (p.ej. "/music/warm-110.wav")
+  file: string; // relativo a /public (p.ej. "/music/fiesta-96-carefree.mp3")
   bpm: number;
   beatOffsetSec: number; // desfase del primer beat
+  vibe: Vibe;
   energy: Energy;
 };
 
-// Catálogo de reserva (beds sintetizados) por si la carpeta está vacía.
-export const MUSIC: Track[] = [
-  {
-    id: "calm-90",
-    title: "Amanecer (suave)",
-    file: "/music/calm-90.wav",
-    bpm: 90,
-    beatOffsetSec: 0,
-    energy: "calm",
-  },
-  {
-    id: "warm-110",
-    title: "Celebración (cálida)",
-    file: "/music/warm-110.wav",
-    bpm: 110,
-    beatOffsetSec: 0,
-    energy: "warm",
-  },
-  {
-    id: "upbeat-128",
-    title: "Fiesta (enérgica)",
-    file: "/music/upbeat-128.wav",
-    bpm: 128,
-    beatOffsetSec: 0,
-    energy: "upbeat",
-  },
-];
-
-// ── Catálogo dinámico: cualquier archivo en public/music/ se convierte en una
-// opción, sin tocar código. Convención de nombre:
-//     <energy>-<bpm>[-etiqueta].<ext>
-//   energy ∈ calm | warm | upbeat   ·   bpm = número (el BPM real del track)
-//   ext ∈ mp3 | wav | m4a | ogg
-// Ejemplos: upbeat-128.mp3 · upbeat-124-neon.mp3 · calm-88-primer-baile.wav
-// Así puedes hacer decenas de canciones en Suno y soltarlas aquí: todas rotan.
-const TRACK_RE = /^(calm|warm|upbeat)-(\d{2,3})(?:-([a-z0-9-]+))?\.(mp3|wav|m4a|ogg)$/i;
-
-const TITLE_BY_ENERGY: Record<Energy, string> = {
-  calm: "Suave",
-  warm: "Cálida",
-  upbeat: "Enérgica",
-};
+const TRACK_RE =
+  /^(romantico|fiesta|cinematico|elegante)-(\d{2,3})(?:-([a-z0-9-]+))?\.(mp3|wav|m4a|ogg)$/i;
 
 function discoverTracks(): Track[] {
   try {
@@ -74,19 +64,20 @@ function discoverTracks(): Track[] {
     const tracks: Track[] = [];
     for (const f of files.sort()) {
       const m = TRACK_RE.exec(f);
-      if (!m) continue; // ignora subcarpetas (p.ej. generated/) y otros archivos
-      const energy = m[1].toLowerCase() as Energy;
+      if (!m) continue; // ignora beats/, LICENSES.md, etc.
+      const vibe = m[1].toLowerCase() as Vibe;
       const bpm = parseInt(m[2], 10);
       const label = m[3]?.replace(/-/g, " ");
       tracks.push({
         id: f.replace(/\.[^.]+$/, ""),
         title: label
-          ? label.charAt(0).toUpperCase() + label.slice(1)
-          : `${TITLE_BY_ENERGY[energy]} · ${bpm}`,
+          ? label.replace(/\b\w/g, (c) => c.toUpperCase())
+          : `${vibe} · ${bpm}`,
         file: `/music/${f}`,
         bpm,
-        beatOffsetSec: 0,
-        energy,
+        beatOffsetSec: 0, // el real viene del análisis cacheado (loadTrackBeats)
+        vibe,
+        energy: ENERGY_BY_VIBE[vibe],
       });
     }
     return tracks;
@@ -95,18 +86,16 @@ function discoverTracks(): Track[] {
   }
 }
 
-// Devuelve el catálogo real de la carpeta; si está vacía, los beds de reserva.
 export function getTracks(): Track[] {
-  const found = discoverTracks();
-  return found.length > 0 ? found : MUSIC;
+  return discoverTracks();
 }
 
-// Energía por defecto según el formato: el reel corto va enérgico; la película
-// larga, más calmada y contemplativa.
-const ENERGY_BY_FORMAT: Record<ReelFormat, Energy> = {
-  reel: "upbeat",
-  trailer: "warm",
-  film: "calm",
+// Vibe por defecto según el formato: el reel corto va de fiesta; el tráiler,
+// cinemático; la película larga, romántica y contemplativa.
+const VIBE_BY_FORMAT: Record<ReelFormat, Vibe> = {
+  reel: "fiesta",
+  trailer: "cinematico",
+  film: "romantico",
 };
 
 // Hash estable de una cadena (para elegir pista de forma determinista por
@@ -121,24 +110,90 @@ function hashString(s: string): number {
   return h >>> 0;
 }
 
+// Elige la pista: pista concreta si el organizador la escogió; si no, rotación
+// determinista dentro del vibe elegido (o del vibe por defecto del formato).
 export function pickTrack(
   format: ReelFormat,
   eventId?: string,
-  override?: string,
+  music?: { vibe?: Vibe | null; trackId?: string | null },
 ): Track {
   const catalog = getTracks();
-  if (override) {
-    const t = catalog.find((m) => m.id === override);
+  if (music?.trackId) {
+    const t = catalog.find((m) => m.id === music.trackId);
     if (t) return t;
   }
-  const energy = ENERGY_BY_FORMAT[format];
-  // Todas las pistas que encajan con la energía del formato.
-  const pool = catalog.filter((m) => m.energy === energy);
-  if (pool.length === 0) return catalog[0] ?? MUSIC[0];
-  // Rotamos entre ellas según el evento: variedad entre eventos, estable dentro
-  // del mismo evento. Sin eventId, la primera (comportamiento previo).
-  const idx = eventId ? hashString(`${eventId}:${format}`) % pool.length : 0;
-  return pool[idx];
+  const vibe = music?.vibe && isVibe(music.vibe) ? music.vibe : VIBE_BY_FORMAT[format];
+  const pool = catalog.filter((m) => m.vibe === vibe);
+  const pick = pool.length > 0 ? pool : catalog;
+  if (pick.length === 0) {
+    throw new Error(
+      "No hay pistas en public/music/ — añade archivos <vibe>-<bpm>-<nombre>.mp3",
+    );
+  }
+  const idx = eventId ? hashString(`${eventId}:${format}`) % pick.length : 0;
+  return pick[idx];
+}
+
+// ── Análisis de beats con caché ─────────────────────────────────────────────
+// 1) public/music/beats/<id>.json — precomputado y versionado (analyze-tracks).
+// 2) STORAGE_ROOT/beat-cache/<id>.json — caché en runtime (pistas nuevas sin
+//    análisis versionado: se calcula una vez y se guarda en el volumen).
+// 3) detectBeatsLocal — cálculo local (~segundos), y se escribe (2).
+
+export type TrackBeats = {
+  bpm: number;
+  beats: number[];
+  downbeats: number[];
+  beatOffsetSec: number;
+};
+
+const STORAGE_ROOT =
+  process.env.STORAGE_ROOT || path.join(process.cwd(), "storage");
+
+function readJson(p: string): TrackBeats | null {
+  try {
+    const j = JSON.parse(fs.readFileSync(p, "utf8")) as TrackBeats;
+    return Array.isArray(j.beats) && j.beats.length > 4 ? j : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadTrackBeats(track: Track): Promise<TrackBeats | null> {
+  const bundled = path.join(
+    process.cwd(),
+    "public",
+    "music",
+    "beats",
+    `${track.id}.json`,
+  );
+  const cached = readJson(bundled);
+  if (cached) return cached;
+
+  const runtime = path.join(STORAGE_ROOT, "beat-cache", `${track.id}.json`);
+  const rt = readJson(runtime);
+  if (rt) return rt;
+
+  // Pista sin análisis precomputado: la medimos ahora (local, gratis) y
+  // guardamos el resultado para no repetirlo.
+  const abs = path.join(process.cwd(), "public", track.file.replace(/^\//, ""));
+  if (!fs.existsSync(abs)) return null;
+  const { detectBeatsLocal } = await import("./ai/beat-detect");
+  const local = await detectBeatsLocal(abs);
+  if (!local) return null;
+  const out: TrackBeats = {
+    bpm: local.bpm,
+    beats: local.beats,
+    downbeats: local.downbeats,
+    beatOffsetSec: local.beatOffsetSec,
+  };
+  try {
+    fs.mkdirSync(path.dirname(runtime), { recursive: true });
+    fs.writeFileSync(runtime, JSON.stringify(out));
+  } catch {
+    /* sin caché, pero el render sigue */
+  }
+  return out;
 }
 
 // Beats base de una FOTO según su posición en el reel: un arco, no un ritmo

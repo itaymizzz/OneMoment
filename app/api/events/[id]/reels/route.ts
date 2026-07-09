@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import { existsSync } from "fs";
 import { prisma } from "@/lib/db";
 import { requestIsOwner } from "@/lib/owner";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
@@ -8,37 +7,14 @@ import { processEvent } from "@/lib/process";
 import { ensureReelsDir, readMedia, saveBuffer, mediaPath } from "@/lib/storage";
 import { renderReel } from "@/lib/render";
 import { MOMENTS, MOMENT_LABEL } from "@/lib/types";
-import { pickTrack, beatAlignClips, type Track } from "@/lib/music";
-import { ai } from "@/lib/ai/config";
+import { pickTrack, beatAlignClips, loadTrackBeats, isVibe } from "@/lib/music";
 import { normalizePhoto, enhancedName } from "@/lib/ai/normalize";
 import {
   enhanceVideo,
   videoEnhancedName,
   videoEnhanceAvailable,
 } from "@/lib/ai/video-enhance";
-import { generateEventTrack } from "@/lib/ai/music-gen";
-import { detectBeats } from "@/lib/ai/beats";
-import { detectBeatsLocal } from "@/lib/ai/beat-detect";
 import { resolveLut, applyLut } from "@/lib/ai/grade";
-
-const STORAGE_ROOT =
-  process.env.STORAGE_ROOT || path.join(process.cwd(), "storage");
-
-// Ruta en disco de la pista elegida, para analizar sus beats en local. Las del
-// catálogo viven en public/music/; las generadas por IA en STORAGE_ROOT/music-gen/.
-function resolveTrackPath(
-  track: Track,
-  gen: { url: string; bpm: number } | null,
-): string | null {
-  let p: string | null = null;
-  if (gen && track.id === "gen") {
-    const file = gen.url.split("/").pop();
-    p = file ? path.join(STORAGE_ROOT, "music-gen", file) : null;
-  } else if (track.file.startsWith("/")) {
-    p = path.join(process.cwd(), "public", track.file);
-  }
-  return p && existsSync(p) ? p : null;
-}
 import { baseUrl } from "@/lib/base-url";
 import { sendEmail, reelReadyEmail, reelFailedEmail } from "@/lib/email";
 import {
@@ -278,48 +254,25 @@ export async function POST(
     } as ReelClip;
   });
 
-  // ── Música: generada a medida (si hay clave) o del catálogo local ──
-  const gen =
-    ai.suno || ai.elevenlabs ? await generateEventTrack(id, format) : null;
-  let track: Track;
-  if (gen) {
-    const energy: Track["energy"] =
-      format === "reel" ? "upbeat" : format === "trailer" ? "warm" : "calm";
-    track = { id: "gen", title: "IA", file: gen.url, bpm: gen.bpm, beatOffsetSec: 0, energy };
-  } else {
-    track = pickTrack(format, id);
-  }
+  // ── Música: biblioteca LICENCIADA (nada generado por IA — editamos momentos
+  // reales). El organizador puede elegir vibe o pista concreta desde el panel;
+  // sin elección, auto-pick determinista según el formato.
+  const music = {
+    vibe: isVibe(body?.music?.vibe) ? body.music.vibe : null,
+    trackId:
+      typeof body?.music?.trackId === "string" ? body.music.trackId : null,
+  };
+  let track = pickTrack(format, id, music);
 
-  // ── Detección REAL de beats (LOCAL, sin claves) ──
-  // Medimos tempo, beats y downbeats del audio real, 100% en casa. Para pistas
-  // del catálogo (BPM conocido) confirma la rejilla y aporta los downbeats para
-  // el latido; para pistas generadas por IA (tempo incierto) corrige el BPM
-  // declarado. Si el análisis local falla y hay Music.ai para una pista
-  // generada, se intenta la nube como respaldo.
+  // Beats REALES desde el análisis precomputado por pista (JSON versionado);
+  // si la pista es nueva y no tiene análisis, se mide una vez y se cachea.
   let realBeats: number[] = [];
   let realDownbeats: number[] = [];
-  const trackAbsPath = resolveTrackPath(track, gen);
-  if (trackAbsPath) {
-    const local = await detectBeatsLocal(trackAbsPath);
-    if (local) {
-      realBeats = local.beats;
-      realDownbeats = local.downbeats;
-      // La pista generada declara el BPM del prompt; el audio real manda.
-      track = gen
-        ? { ...track, bpm: local.bpm, beatOffsetSec: local.beatOffsetSec }
-        : { ...track, beatOffsetSec: local.beatOffsetSec };
-    }
-  }
-  if (realBeats.length === 0 && gen && ai.musicai) {
-    const detected = await detectBeats(`${baseUrl()}${track.file}`);
-    if (detected) {
-      track = {
-        ...track,
-        bpm: detected.bpm,
-        beatOffsetSec: detected.beats[0] ?? track.beatOffsetSec,
-      };
-      realBeats = detected.beats;
-    }
+  const tb = await loadTrackBeats(track);
+  if (tb) {
+    realBeats = tb.beats;
+    realDownbeats = tb.downbeats;
+    track = { ...track, bpm: tb.bpm, beatOffsetSec: tb.beatOffsetSec };
   }
 
   // Ajustamos las duraciones de los clips para que los cortes caigan en los

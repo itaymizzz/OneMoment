@@ -72,11 +72,12 @@ const rawClips: ReelClip[] = shots.map(([seed, label, o, fx, fy], i) => {
 });
 
 const track: Track = {
-  id: "upbeat-128",
+  id: "review-synthetic",
   title: "Review",
-  file: "/music/upbeat-128.wav",
+  file: "/music/fiesta-96-carefree.mp3",
   bpm: BPM,
   beatOffsetSec: OFFSET,
+  vibe: "fiesta",
   energy: "upbeat",
 };
 
