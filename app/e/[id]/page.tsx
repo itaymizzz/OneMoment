@@ -9,6 +9,7 @@ import ReelStudio from "./ReelStudio";
 import EventTabs from "./EventTabs";
 import ClaimOwner from "./ClaimOwner";
 import DangerZone from "./DangerZone";
+import NotifyEmail from "./NotifyEmail";
 import { baseUrl } from "@/lib/base-url";
 import { ownerCookieName, tokenMatches } from "@/lib/owner";
 
@@ -113,8 +114,11 @@ export default async function EventDashboard({
         </details>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]">
-          {/* Panel de compartir / QR */}
-          <SharePanel joinUrl={joinUrl} qrDataUrl={qrDataUrl} eventName={event.name} />
+          {/* Panel de compartir / QR + email de avisos */}
+          <div>
+            <SharePanel joinUrl={joinUrl} qrDataUrl={qrDataUrl} eventName={event.name} />
+            <NotifyEmail eventId={event.id} initialEmail={event.ownerEmail ?? ""} />
+          </div>
 
           {/* Estudio de IA + galería */}
           <div className="space-y-6">

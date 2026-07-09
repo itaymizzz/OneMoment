@@ -39,6 +39,7 @@ function resolveTrackPath(
   return p && existsSync(p) ? p : null;
 }
 import { baseUrl } from "@/lib/base-url";
+import { sendEmail, reelReadyEmail, reelFailedEmail } from "@/lib/email";
 import {
   FPS,
   reelFormatSchema,
@@ -102,7 +103,14 @@ export async function POST(
 
   const event = await prisma.event.findUnique({
     where: { id },
-    select: { id: true, name: true, hostName: true, date: true },
+    select: {
+      id: true,
+      name: true,
+      hostName: true,
+      date: true,
+      ownerToken: true,
+      ownerEmail: true,
+    },
   });
   if (!event) {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });
@@ -346,10 +354,29 @@ export async function POST(
     data: { eventId: id, format, status: "rendering" },
   });
 
+  // Aviso por email (si el dueño dejó su correo): nunca bloquea la respuesta.
+  const panelUrl = event.ownerToken
+    ? `${baseUrl()}/e/${id}?k=${event.ownerToken}`
+    : `${baseUrl()}/e/${id}`;
+  const notify = (mail: { subject: string; html: string }) => {
+    if (!event.ownerEmail) return;
+    void sendEmail({ to: event.ownerEmail, ...mail }).catch(() => {});
+  };
+
   try {
     const dir = await ensureReelsDir(id);
     const outPath = path.join(dir, `${reel.id}.mp4`);
-    await renderReel(inputProps, outPath);
+    // Reintento automático: un fallo de render suele ser transitorio (pico de
+    // memoria, clip que tardó en servirse). Probamos una segunda vez antes de
+    // marcar el reel como fallido.
+    try {
+      await renderReel(inputProps, outPath);
+    } catch (first) {
+      console.warn(
+        `[reels] render falló, reintentando una vez: ${first instanceof Error ? first.message : first}`,
+      );
+      await renderReel(inputProps, outPath);
+    }
 
     // Pase de color con LUT 3D (si está activado). Si falla, el reel queda sin
     // gradar pero íntegro; no abortamos el render por esto.
@@ -359,12 +386,14 @@ export async function POST(
       where: { id: reel.id },
       data: { status: "done", outputUrl: `/api/reels/${reel.id}` },
     });
+    notify(reelReadyEmail(event.name, format, panelUrl));
     return NextResponse.json({ reel: done });
   } catch (err) {
     await prisma.reel.update({
       where: { id: reel.id },
       data: { status: "failed" },
     });
+    notify(reelFailedEmail(event.name, format, panelUrl));
     return NextResponse.json(
       { error: "Falló el render", detail: err instanceof Error ? err.message : String(err) },
       { status: 500 },

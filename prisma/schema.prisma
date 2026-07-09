@@ -15,6 +15,7 @@ model Event {
   id        String   @id @default(cuid())
   slug      String   @unique // usado en el link público /j/<slug>
   ownerToken String? @unique // secreto del organizador: da acceso al panel /e/<id>
+  ownerEmail String? // aviso "tu película está lista" (opcional, lo pone el dueño)
   name      String // "Boda de Barak & ..."
   type      String   @default("wedding") // wedding | birthday | corporate | ...
   date      DateTime?
