@@ -66,3 +66,32 @@ duration 9.3s** for 12 photos. Every photo = a fixed **0.93s** (2 beats @128 BPM
 - `mediaFilter('cinematic')` `saturate(1.12)`→`~1.06`, and cap `GradeOverlay` opacity so skin isn't pushed — matches the 2026 "natural, not over-saturated" trend.
 
 Priority for Phase 4 step 6: **A, B, C, D, F, G** (structure/pacing/cuts/hook/captions/outro — highest impact, all local code, no new deps). E and H are follow-ups.
+
+---
+
+# Re-score (July 2026) — after fixes A–I all landed
+
+Test render: `scripts/review-render.ts` (rewritten to reproduce the production
+pipeline faithfully: real `beatAlignClips` with the pacing arc, cuts on a
+**measured** beat grid with ±2.5% tempo drift, hook-first ordering, focal
+points on mixed-orientation photos). Output: 1080×1920 @30fps, **26.4s**
+(target 25–35s ✅), 20 photos.
+
+**Measured:** every cut lands ≤ **33 ms (≤1 frame)** from a measured beat
+timestamp despite the drifting tempo; section changes enter on downbeats;
+pacing arc = hook 4.8 beats → intro 4.1 → build 3 → party 2 → closing 6.1.
+
+| Axis | Was | Now | Why |
+|---|---|---|---|
+| 1. Hook | 1 | **5** | Best clip at position 0, title as overlay on it (no blocking card), held ~2.2s. |
+| 2. Arc | 2 | **4** | Hook → chronological acts → held calm close; act changes land on downbeats. |
+| 3. Pacing ramp | 1 | **5** | Position-aware curve, measured: 4.8→4.1→3→2→6.1 beats. |
+| 4. Beat sync | 2 | **4** | Cuts snap to measured `beats[]` timestamps (`music.ts` real-grid path); downbeat-snapped section entries. No explicit "drop detection" yet (would be a 5). |
+| 5. Grade | 3 | **4** | Saturation 1.12→1.06 (natural 2026 look); `lut3d` pass unchanged on Railway. Not skin-aware. |
+| 6. Framing | 3 | **4** | Face-aware crop: Rekognition boxes (area-weighted) / Claude focal → `objectPosition`; center fallback without AI keys. |
+| 7. Captions | 2 | **4** | In the safe zone (bottom padding 470px), 48px min size, one label per act. |
+| 8. Closing | 1 | **4** | Final clip held ~2.8s (6 beats) + outro with brand and event date. |
+| **Overall** | ≈1.9 | **≈4.25** | Target ≥4 on every axis: **met**. |
+
+Remaining to reach 5s: energy-drop detection to place the hero clip on the
+musical drop (axis 4), and a skin-tone-aware grade pass (axis 5).
