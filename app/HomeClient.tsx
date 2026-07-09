@@ -271,6 +271,18 @@ export default function HomeClient() {
                 {loading ? "Creando…" : "Crear evento y generar QR"}
                 {!loading && <ArrowRightIcon width={17} height={17} />}
               </button>
+
+              <p className="!mt-4 text-center text-[11px] leading-relaxed text-muted">
+                Al crear el evento aceptas los{" "}
+                <a href="/terminos" className="underline underline-offset-2 hover:text-foreground">
+                  términos
+                </a>{" "}
+                y la{" "}
+                <a href="/privacidad" className="underline underline-offset-2 hover:text-foreground">
+                  política de privacidad
+                </a>
+                .
+              </p>
               </form>
             </div>
           </Reveal>

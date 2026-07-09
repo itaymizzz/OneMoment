@@ -120,6 +120,18 @@ export default function RootLayout({
           <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
         </noscript>
         {children}
+        {/* Pie global: enlaces legales en todas las páginas. */}
+        <footer className="mt-auto py-6 text-center text-[11px] text-muted/80">
+          <a href="/terminos" className="underline-offset-2 hover:underline">
+            Términos
+          </a>
+          <span aria-hidden className="mx-2">
+            ·
+          </span>
+          <a href="/privacidad" className="underline-offset-2 hover:underline">
+            Privacidad
+          </a>
+        </footer>
       </body>
     </html>
   );
