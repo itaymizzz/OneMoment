@@ -36,7 +36,7 @@ export default function DangerZone({
   }
 
   return (
-    <details className="mt-6 rounded-xl border border-red-500/25 bg-red-500/5 p-4 text-sm">
+    <details className="mt-6 rounded-md border border-red-500/25 bg-red-500/5 p-4 text-sm">
       <summary className="cursor-pointer font-medium text-red-300/90">
         Borrar este evento
       </summary>

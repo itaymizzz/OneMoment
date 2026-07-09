@@ -41,7 +41,7 @@ export default function NotifyEmail({
   }
 
   return (
-    <div className="mt-6 rounded-xl border border-border bg-card/50 p-4 text-sm">
+    <div className="mt-6 rounded-md border border-hairline bg-card/50 p-4 text-sm">
       <p className="font-medium">Avísame cuando la película esté lista</p>
       <p className="mt-1 text-xs text-muted">
         Te mandamos un email al terminar cada montaje (y si algo falla, para

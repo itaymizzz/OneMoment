@@ -298,9 +298,11 @@ export default function Gallery({
 
   if (media.length === 0) {
     return (
-      <div className="card p-10 text-center text-muted">
-        <p className="text-lg">Aún no hay fotos ni videos.</p>
-        <p className="mt-1 text-sm">
+      <div className="rounded-md border border-hairline bg-card/50 p-10 text-center">
+        <p className="font-display text-2xl font-light">
+          Aún no hay fotos ni videos.
+        </p>
+        <p className="mt-2 text-sm text-muted">
           Comparte el QR con tus invitados — el contenido aparecerá aquí en vivo.
         </p>
       </div>
@@ -316,7 +318,7 @@ export default function Gallery({
   const best = media.filter((m) => m.selected);
 
   return (
-    <div className="card p-5">
+    <div className="rounded-md border border-hairline bg-card/50 p-5">
       {active && (
         <Lightbox
           m={active}
@@ -325,21 +327,25 @@ export default function Gallery({
           onDelete={remove}
         />
       )}
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-semibold">
-          Galería{" "}
-          <span className="text-sm font-normal text-muted">
-            ({media.length} archivos{pending > 0 ? ` · ${pending} analizándose` : ""})
-          </span>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="eyebrow">Galería</p>
+          <h2 className="font-display mt-1.5 text-2xl font-light">
+            Lo que capturaron
+            <span className="ml-2 align-middle text-sm font-normal text-muted">
+              {media.length} archivos
+              {pending > 0 ? ` · ${pending} analizándose` : ""}
+            </span>
+          </h2>
           <a
             href={`/api/events/${eventId}/download`}
-            className="ml-3 inline-flex items-center gap-1 align-middle text-xs font-normal text-muted underline underline-offset-2 hover:text-foreground"
+            className="mt-1 inline-flex items-center gap-1 text-xs text-muted underline underline-offset-2 hover:text-foreground"
             title="Descargar todos los originales en un .zip"
           >
             <DownloadIcon width={13} height={13} /> Descargar todo (.zip)
           </a>
-        </h2>
-        <div className="flex gap-1 rounded-lg border border-border p-0.5 text-sm">
+        </div>
+        <div className="flex gap-1 rounded-md border border-hairline p-0.5 text-sm">
           <button
             onClick={() => setView("timeline")}
             className={`rounded px-3 py-1 ${view === "timeline" ? "bg-accent text-black" : "text-muted"}`}
@@ -388,10 +394,13 @@ export default function Gallery({
         <div className="space-y-6">
           {byMoment.map((g) => (
             <div key={g.key}>
-              <h3 className="mb-2 text-sm font-semibold text-muted">
-                {g.emoji} {g.label}{" "}
-                <span className="font-normal">· {g.items.length}</span>
-              </h3>
+              {/* Cabecera de momento estilo "cartela": mono + hairline, sin emoji. */}
+              <div className="mb-3 flex items-center gap-3">
+                <h3 className="eyebrow whitespace-nowrap !text-foreground/80">
+                  {g.label} · {g.items.length}
+                </h3>
+                <span aria-hidden className="h-px flex-1 bg-hairline" />
+              </div>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
                 {g.items.map((m) => (
                   <Thumb
@@ -407,9 +416,12 @@ export default function Gallery({
           ))}
           {unsorted.length > 0 && (
             <div>
-              <h3 className="mb-2 text-sm font-semibold text-muted">
-                🗂️ Sin clasificar · {unsorted.length}
-              </h3>
+              <div className="mb-3 flex items-center gap-3">
+                <h3 className="eyebrow whitespace-nowrap !text-foreground/80">
+                  Sin clasificar · {unsorted.length}
+                </h3>
+                <span aria-hidden className="h-px flex-1 bg-hairline" />
+              </div>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
                 {unsorted.map((m) => (
                   <Thumb key={m.id} m={m} onOpen={setActive} onOverride={override} onDelete={remove} />

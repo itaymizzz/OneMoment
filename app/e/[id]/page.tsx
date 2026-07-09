@@ -103,10 +103,13 @@ export default async function EventDashboard({
           </Link>
         </div>
 
-        <header className="mt-4 flex flex-wrap items-end justify-between gap-4">
+        <header className="mt-5 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-display text-4xl font-semibold">{event.name}</h1>
-            <p className="mt-1 text-sm text-muted">
+            <p className="eyebrow">Panel del evento</p>
+            <h1 className="font-display mt-1.5 text-4xl font-light">
+              {event.name}
+            </h1>
+            <p className="eyebrow mt-2.5">
               {event._count.media} archivos · {event._count.guests} invitados
             </p>
           </div>
@@ -128,7 +131,7 @@ export default async function EventDashboard({
 
         {/* Enlace privado de organizador: para reabrir el panel en otro
             dispositivo. NO es el link de invitados (ese es el QR). */}
-        <details className="mt-6 rounded-xl border border-border bg-card/50 p-4 text-sm">
+        <details className="mt-6 rounded-md border border-hairline bg-card/50 p-4 text-sm">
           <summary className="cursor-pointer font-medium">
             Tu enlace privado de organizador
           </summary>

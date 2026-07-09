@@ -128,23 +128,23 @@ export default function ReelStudio({
   const latestDone = reels.find((r) => r.status === "done" && r.outputUrl);
 
   return (
-    <section className="card p-5">
+    <section className="rounded-md border border-hairline bg-card/50 p-5">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 font-semibold">
-          <SparklesIcon className="text-accent" width={18} height={18} />
-          Estudio de IA
-        </h2>
-        <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted">
-          Remotion
-        </span>
+        <div>
+          <p className="eyebrow">Estudio</p>
+          <h2 className="font-display mt-1.5 flex items-center gap-2 text-2xl font-light">
+            <SparklesIcon className="text-accent" width={19} height={19} />
+            La película
+          </h2>
+        </div>
       </div>
-      <p className="mt-1 text-sm text-muted">
+      <p className="mt-2 text-sm text-muted">
         La IA monta una película con el mejor contenido del evento.
       </p>
 
       {/* Música: vibe (o pista concreta) de la biblioteca licenciada. */}
-      <div className="mt-4">
-        <p className="text-xs font-medium text-muted">Música</p>
+      <div className="mt-5">
+        <p className="eyebrow">Música</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           <button
             onClick={() => {
@@ -198,7 +198,7 @@ export default function ReelStudio({
           const rendering = busy === f.key;
           const Icon = f.key === "reel" ? PlayIcon : f.key === "trailer" ? FilmIcon : ClapperboardIcon;
           return (
-            <div key={f.key} className="flex flex-col rounded-xl border border-border p-3">
+            <div key={f.key} className="flex flex-col rounded-md border border-hairline p-3">
               <p className="flex items-center gap-1.5 text-sm font-semibold">
                 <Icon className="text-muted" width={16} height={16} />
                 {f.title}
@@ -246,7 +246,7 @@ export default function ReelStudio({
             src={latestDone.outputUrl!}
             controls
             playsInline
-            className="w-full rounded-xl border border-border bg-black"
+            className="w-full rounded-md border border-hairline bg-black"
           />
           <a
             href={latestDone.outputUrl!}
@@ -263,7 +263,7 @@ export default function ReelStudio({
           {reels.map((r) => (
             <div
               key={r.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-1.5 text-xs"
+              className="flex items-center justify-between gap-2 border-t border-hairline px-1 py-2 text-xs first:border-t-0"
             >
               <span>{FORMAT_LABEL[r.format] ?? r.format}</span>
               <span className="flex items-center gap-2">

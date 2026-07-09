@@ -61,9 +61,12 @@ export default function SharePanel({
   }
 
   return (
-    <aside className="card p-6 h-fit lg:sticky lg:top-6">
-      <h2 className="font-semibold">Comparte con tus invitados</h2>
-      <p className="mt-1 text-sm text-muted">
+    <aside className="h-fit rounded-md border border-hairline bg-card/50 p-6 lg:sticky lg:top-6">
+      <p className="eyebrow">Comparte</p>
+      <h2 className="font-display mt-1.5 text-2xl font-light">
+        Invita a tus invitados
+      </h2>
+      <p className="mt-2 text-sm text-muted">
         Escanean el QR o abren el link. No instalan nada.
       </p>
 
@@ -72,7 +75,7 @@ export default function SharePanel({
         <img src={qrDataUrl} alt="QR del evento" width={260} height={260} />
       </div>
 
-      <div className="mt-4 break-all rounded-lg border border-border bg-[#0e0e14] px-3 py-2 text-sm text-muted">
+      <div className="mt-4 break-all rounded-md border border-hairline bg-black/30 px-3 py-2 font-mono text-xs leading-relaxed text-muted">
         {joinUrl}
       </div>
 
@@ -92,7 +95,7 @@ export default function SharePanel({
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button
           onClick={copy}
-          className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm transition-colors hover:border-accent"
+          className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-hairline py-2 text-sm transition-colors hover:border-accent"
         >
           {copied ? (
             <>

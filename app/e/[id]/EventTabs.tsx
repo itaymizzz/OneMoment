@@ -15,7 +15,7 @@ export default function EventTabs({ eventId }: { eventId: string }) {
   ];
 
   return (
-    <nav className="mt-6 flex gap-1 border-b border-border">
+    <nav className="mt-6 flex gap-1 border-b border-hairline">
       {tabs.map(({ href, label, Icon, exact }) => {
         const active = exact ? pathname === href : pathname.startsWith(href);
         return (
