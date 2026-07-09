@@ -95,3 +95,39 @@ pacing arc = hook 4.8 beats → intro 4.1 → build 3 → party 2 → closing 6.
 
 Remaining to reach 5s: energy-drop detection to place the hero clip on the
 musical drop (axis 4), and a skin-tone-aware grade pass (axis 5).
+
+---
+
+# Re-score #2 (July 2026, later) — drop placement + skin-aware grade landed
+
+Both remaining upgrades implemented and verified:
+
+**Musical drop** (`lib/ai/beat-detect.ts` → `detectDrop`): sustained RMS-energy
+jump at a downbeat (chorus entry), with a peak-accent fallback for
+constant-groove tracks — all 11 library tracks now carry a `dropSec` in their
+versioned beat JSON. At render time (`planAudioForDrop`): if the drop falls
+beyond the reel, the track starts offset so the drop lands at ~55% of the reel
+(the climax slot); `beatAlignClips` clavas a cut exactly on the drop beat and
+the **hero clip (top emotional/quality pick) is swapped into that slot**; the
+second-best opens as the hook. Measured on `fiesta-96-carefree`: track drop
+31.0s → audio starts 14.0s → drop lands 17.0s → the cut at 17.00s has **0 ms
+deviation** and the hero starts on it. Reel 29.5s, max cut deviation 15.5 ms.
+
+**Skin-tone-aware grade** (`lib/ai/grade.ts`): chroma skin mask (CbCr 77–127 /
+133–173, all skin tones) blurred and fed to `maskedmerge` — skin keeps ~65% of
+its original color under the LUT; everything else gets the full look. Verified
+with color patches (`scripts/test-skin-grade.ts`): light skin shift Δ20→Δ7,
+dark skin Δ13→Δ3, while teal (Δ18→Δ17) and whites (Δ19→Δ18) keep the look.
+Falls back to plain lut3d if filters are missing; `GRADE_SKIN_PROTECT=0`
+disables.
+
+| Axis | Was | Now | Why |
+|---|---|---|---|
+| 2. Arc | 4 | **5** | The arc now has its anchor: build → **hero image exactly on the musical drop** at ~55% → party → held close. |
+| 4. Beat sync | 4 | **5** | Cuts ≤½ frame from measured beats AND the drop is detected + hit exactly (0 ms on the drop cut). |
+| 5. Grade | 4 | **5** | Filmic look preserved on scenery, skin protected across tones and venue lighting. |
+| Others | 5/4/4/4/4 | unchanged | Hook 5 · Pacing 5 · Framing 4 · Captions 4 · Closing 4 |
+| **Overall** | ≈4.25 | **≈4.6** | Every axis ≥4, three at 5. |
+
+To reach 5 on the rest: face-aware crop could use eye-line placement (axis 6),
+captions could adapt per-scene contrast (axis 7).
