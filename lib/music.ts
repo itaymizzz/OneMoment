@@ -134,6 +134,15 @@ export function pickTrack(
   return pick[idx];
 }
 
+// Crédito musical que la película muestra en el outro. Toda la biblioteca
+// actual es de Kevin MacLeod bajo CC BY 4.0 (la atribución es obligatoria —
+// ver public/music/LICENSES.md). Cuando entren pistas de Artlist/Epidemic
+// (sin atribución), devuelve "" para esas y el outro no muestra nada.
+export function trackCredit(track: Track): string {
+  void track; // hoy todas las pistas requieren el mismo crédito
+  return "Música: Kevin MacLeod (incompetech.com) · CC BY 4.0";
+}
+
 // Presupuesto de clips del REEL según el tempo de la pista: el arco consume
 // ~2.9 beats/clip de media, así que con una canción lenta hay que montar menos
 // planos para que el reel siga cayendo en los 25–35s del spec (a 128 BPM caben

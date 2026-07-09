@@ -120,6 +120,7 @@ const inputProps = {
   title: "Boda de Ana & Leo",
   subtitle: "Organiza OneMoment",
   dateLabel: "29 · 06 · 2026",
+  musicCredit: "Música: Kevin MacLeod (incompetech.com) · CC BY 4.0",
   clips,
   audioUrl: null, // audio doesn't affect the frames we score
   bpm: BPM,

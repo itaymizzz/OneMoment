@@ -13,6 +13,7 @@ import {
   loadTrackBeats,
   isVibe,
   reelClipBudget,
+  trackCredit,
 } from "@/lib/music";
 import { normalizePhoto, enhancedName } from "@/lib/ai/normalize";
 import {
@@ -310,6 +311,7 @@ export async function POST(
     title: event.name,
     subtitle: event.hostName ? `Organiza ${event.hostName}` : "",
     dateLabel,
+    musicCredit: trackCredit(track),
     clips: alignedClips,
     audioUrl: `${baseUrl()}${track.file}`,
     bpm: track.bpm,

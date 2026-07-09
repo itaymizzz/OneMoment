@@ -442,7 +442,13 @@ function TitleOverlay({
   );
 }
 
-function OutroCard({ dateLabel }: { dateLabel: string }) {
+function OutroCard({
+  dateLabel,
+  musicCredit,
+}: {
+  dateLabel: string;
+  musicCredit: string;
+}) {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, 16], [0, 1], { extrapolateRight: "clamp" });
   return (
@@ -476,6 +482,20 @@ function OutroCard({ dateLabel }: { dateLabel: string }) {
             {dateLabel}
           </div>
         ) : null}
+        {/* Crédito musical (obligatorio con CC BY). Dentro del bloque centrado:
+            legible y fuera de la zona insegura inferior de Reels/TikTok. */}
+        {musicCredit ? (
+          <div
+            style={{
+              marginTop: 34,
+              fontSize: 19,
+              color: "rgba(245,245,247,0.4)",
+              letterSpacing: 0.5,
+            }}
+          >
+            {musicCredit}
+          </div>
+        ) : null}
       </div>
     </AbsoluteFill>
   );
@@ -502,7 +522,9 @@ export function Reel(props: ReelProps) {
     }
     let content: React.ReactNode;
     if (seg.kind === "outro") {
-      content = <OutroCard dateLabel={props.dateLabel} />;
+      content = (
+        <OutroCard dateLabel={props.dateLabel} musicCredit={props.musicCredit} />
+      );
     } else {
       const isHook = clipIndex === 0;
       content = (

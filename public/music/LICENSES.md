@@ -10,9 +10,11 @@ condición: **atribución**. El crédito requerido es:
 > Music: Kevin MacLeod (incompetech.com) — Licensed under Creative Commons:
 > By Attribution 4.0
 
-Dónde darlo: en la descripción/página donde se publique el video, o en los
-créditos del propio video. (Si se quiere eliminar la obligación de atribuir,
-incompetech vende licencias "no-attribution" por pista.)
+Dónde se da: **la película lo muestra automáticamente en la tarjeta final**
+(outro) — ver `trackCredit()` en `lib/music.ts`. Con eso la atribución viaja
+con el video vaya donde vaya. (Si se quiere eliminar la obligación de
+atribuir, incompetech vende licencias "no-attribution" por pista; entonces
+`trackCredit()` debe devolver "" para esas pistas.)
 
 | Archivo | Título original | Compositor | Licencia |
 |---|---|---|---|

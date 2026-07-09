@@ -35,6 +35,8 @@ export const reelPropsSchema = z.object({
   clips: z.array(reelClipSchema),
   // Fecha del evento ya formateada (p.ej. "29 · 06 · 2026"); "" si no hay.
   dateLabel: z.string().default(""),
+  // Crédito de la música (obligatorio con pistas CC BY); "" = no se muestra.
+  musicCredit: z.string().default(""),
   audioUrl: z.string().nullable().default(null),
   // ── Sincronía musical ──
   // BPM del track y desfase del primer beat (seg). Con esto la edición "late"
