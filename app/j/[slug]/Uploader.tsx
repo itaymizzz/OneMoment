@@ -81,7 +81,11 @@ type Item = {
   progress: number; // 0..100
   status: Status;
   file: Blob; // el archivo (o Blob rehidratado de IndexedDB) para poder reintentar.
+  missionId?: string | null; // misión activa cuando se capturó (viaja en reintentos)
 };
+
+// Misión de fotos del evento (reto de subida) + progreso de ESTE invitado.
+type Mission = { id: string; title: string };
 
 // Una subida propia confirmada por el servidor (pestaña "Mis fotos").
 type MineItem = {
@@ -132,10 +136,12 @@ async function uploadOne(
   file: Blob,
   fileName: string,
   onProgress: (pct: number) => void,
+  missionId?: string | null,
 ): Promise<{ ok: boolean; limitReached: boolean }> {
   const fd = new FormData();
   if (identity.token) fd.append("guestToken", identity.token);
   else fd.append("guestId", identity.guestId);
+  if (missionId) fd.append("missionId", missionId);
   fd.append("files", file, fileName);
   if (file.type.startsWith("video/")) {
     const m = await readVideoMeta(file);
@@ -179,6 +185,22 @@ export default function Uploader({
   const [items, setItems] = useState<Item[]>([]);
   // El evento llegó al límite de su paquete (402): banner elegante, sin drama.
   const [limitHit, setLimitHit] = useState(false);
+  // ── Misiones: retos de captura del evento + progreso de este invitado ──
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [completedMissions, setCompletedMissions] = useState<Set<string>>(
+    new Set(),
+  );
+  const [activeMission, setActiveMission] = useState<Mission | null>(null);
+  const [showMissions, setShowMissions] = useState(false);
+  const activeMissionRef = useRef<Mission | null>(null);
+  useEffect(() => {
+    activeMissionRef.current = activeMission;
+  }, [activeMission]);
+  // ── Momento Flash: aviso a pantalla completa cuando el organizador lo pide ──
+  const [flash, setFlash] = useState<{ id: string; secondsLeft: number } | null>(
+    null,
+  );
+  const flashDismissed = useRef<Set<string>>(new Set());
   // "Mis fotos": las subidas confirmadas de ESTE invitado, según el servidor.
   const [mine, setMine] = useState<MineItem[]>([]);
   const [showMine, setShowMine] = useState(false);
@@ -262,6 +284,70 @@ export default function Uploader({
     };
   }, [phase, eventId, doneCountAll]);
 
+  // Misiones del evento + cuáles ya completó este invitado. Se refresca tras
+  // cada subida (una misión recién cumplida gana su check al instante).
+  useEffect(() => {
+    if (phase !== "ready") return;
+    const token = identityRef.current?.token;
+    let alive = true;
+    fetch(
+      `/api/events/${eventId}/missions${token ? `?guest=${encodeURIComponent(token)}` : ""}`,
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { missions: Mission[]; completed: string[] } | null) => {
+        if (!alive || !d) return;
+        setMissions(d.missions);
+        setCompletedMissions(new Set(d.completed));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [phase, eventId, doneCountAll]);
+
+  // Momento Flash: sondeo ligero (~8s, solo con la pestaña visible). Cuando el
+  // organizador dispara, TODOS los teléfonos muestran "📸 ¡FOTO AHORA!".
+  useEffect(() => {
+    if (phase !== "ready") return;
+    let alive = true;
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch(`/api/events/${eventId}/flash`, {
+          cache: "no-store",
+        });
+        if (!res.ok || !alive) return;
+        const d = (await res.json()) as {
+          active: { id: string; secondsLeft: number } | null;
+        };
+        if (d.active && !flashDismissed.current.has(d.active.id)) {
+          setFlash(d.active);
+        } else if (!d.active) {
+          setFlash(null);
+        }
+      } catch {
+        /* siguiente tick */
+      }
+    };
+    tick();
+    const t = setInterval(tick, 8000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [phase, eventId]);
+
+  // Cuenta atrás local del flash (entre sondeos) para que el número respire.
+  useEffect(() => {
+    if (!flash) return;
+    const t = setInterval(() => {
+      setFlash((f) =>
+        f && f.secondsLeft > 1 ? { ...f, secondsLeft: f.secondsLeft - 1 } : null,
+      );
+    }, 1000);
+    return () => clearInterval(t);
+  }, [flash?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Al cargar (p. ej. tras recargar a mitad del evento) reanudamos las subidas
   // que quedaron pendientes en IndexedDB para este invitado. Se ejecuta una vez.
   useEffect(() => {
@@ -280,11 +366,12 @@ export default function Uploader({
           progress: 0,
           status: "pending" as Status,
           file: p.blob,
+          missionId: p.missionId ?? null,
         }));
       if (restored.length === 0) return;
       setItems((prev) => [...restored, ...prev]);
       for (const it of restored) {
-        await runUpload(it.id, it.file, it.name);
+        await runUpload(it.id, it.file, it.name, it.missionId);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -296,7 +383,7 @@ export default function Uploader({
       const stalled = itemsRef.current.filter(
         (i) => i.status === "pending" || i.status === "error",
       );
-      for (const it of stalled) runUpload(it.id, it.file, it.name);
+      for (const it of stalled) runUpload(it.id, it.file, it.name, it.missionId);
     }
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
@@ -382,7 +469,12 @@ export default function Uploader({
   // Sube un item con reintentos + espera creciente. Persiste en IndexedDB hasta
   // que termina con éxito, para que sobreviva a una recarga. Si no hay conexión,
   // lo deja "pending"; el listener de `online` lo reanudará.
-  async function runUpload(itemId: string, file: Blob, fileName: string) {
+  async function runUpload(
+    itemId: string,
+    file: Blob,
+    fileName: string,
+    missionId?: string | null,
+  ) {
     const who = identityRef.current;
     if (!who) return false;
 
@@ -399,6 +491,7 @@ export default function Uploader({
         file,
         fileName,
         (pct) => patch(itemId, { progress: pct }),
+        missionId,
       );
       if (limitReached) {
         // Límite del paquete: no es un fallo de red — no reintentamos. El
@@ -433,6 +526,8 @@ export default function Uploader({
     const who = identityRef.current;
     if (!fileList || !who) return;
     const files = Array.from(fileList);
+    // La misión activa al momento de capturar viaja con estas subidas.
+    const missionId = activeMissionRef.current?.id ?? null;
 
     // Creamos las tarjetas optimistas con preview local.
     const newItems: Item[] = files.map((f, i) => ({
@@ -443,6 +538,7 @@ export default function Uploader({
       progress: 0,
       status: "pending",
       file: f,
+      missionId,
     }));
     setItems((prev) => [...newItems, ...prev]);
 
@@ -460,12 +556,13 @@ export default function Uploader({
         isVideo: it.isVideo,
         blob: f,
         createdAt: Date.now(),
+        missionId,
       });
     }
 
     // Subimos de forma secuencial para no saturar la red móvil del invitado.
     for (const item of newItems) {
-      await runUpload(item.id, item.file, item.name);
+      await runUpload(item.id, item.file, item.name, item.missionId);
     }
   }
 
@@ -561,11 +658,69 @@ export default function Uploader({
 
   return (
     <div className="mt-8">
+      {/* ── MOMENTO FLASH: el organizador pidió una foto AHORA ── */}
+      {flash && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0b0a08]/[0.98] px-8 text-center"
+          role="alertdialog"
+          aria-label="Momento flash: foto ahora"
+        >
+          <p className="eyebrow">Momento flash</p>
+          <p className="mt-6 text-7xl" aria-hidden>
+            📸
+          </p>
+          <p className="font-display mt-6 text-5xl font-light leading-tight">
+            ¡Foto <em className="italic text-accent">ahora</em>!
+          </p>
+          <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-muted">
+            El organizador pidió capturar este momento. Todos a la vez.
+          </p>
+          <p className="mt-5 font-mono text-sm tracking-[0.22em] text-accent">
+            {flash.secondsLeft}s
+          </p>
+          <button
+            onClick={() => {
+              flashDismissed.current.add(flash.id);
+              setFlash(null);
+              cameraRef.current?.click();
+            }}
+            className="btn-primary mt-8 w-full max-w-xs cursor-pointer py-5 text-lg"
+          >
+            Abrir la cámara
+          </button>
+          <button
+            onClick={() => {
+              flashDismissed.current.add(flash.id);
+              setFlash(null);
+            }}
+            className="mt-4 cursor-pointer text-xs text-muted underline underline-offset-2 hover:text-foreground"
+          >
+            Ahora no
+          </button>
+        </div>
+      )}
+
       <div className="rounded-md border border-hairline bg-card/50 p-5 text-center">
         <p className="eyebrow">Hola{name ? ` · ${name}` : ""}</p>
         <p className="font-display mt-2 text-2xl font-light">
           Captura el momento
         </p>
+
+        {/* Misión activa: las próximas capturas cuentan para ella. */}
+        {activeMission && (
+          <button
+            onClick={() => setActiveMission(null)}
+            className="mt-3 inline-flex max-w-full cursor-pointer items-center gap-2 rounded-full border border-accent/50 bg-accent/10 px-4 py-1.5 text-left"
+            aria-label="Quitar la misión activa"
+          >
+            <span className="truncate font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
+              Misión · {activeMission.title}
+            </span>
+            <span aria-hidden className="text-sm leading-none text-accent">
+              ×
+            </span>
+          </button>
+        )}
 
         {/* Botones grandes: para usarse a oscuras, con una mano y una copa
             en la otra. Nada de objetivos pequeños. */}
@@ -644,6 +799,77 @@ export default function Uploader({
         </div>
       </div>
 
+      {/* ── MISIONES: retos de captura del evento ── */}
+      {missions.length > 0 && (
+        <div className="mt-5 rounded-md border border-hairline bg-card/50 p-5">
+          <button
+            onClick={() => setShowMissions((s) => !s)}
+            className="flex w-full cursor-pointer items-baseline justify-between"
+            aria-expanded={showMissions}
+          >
+            <span className="eyebrow">Misiones</span>
+            <span className="font-mono text-xs text-accent">
+              {completedMissions.size}/{missions.length}
+              <span aria-hidden className="ml-2 text-muted">
+                {showMissions ? "▴" : "▾"}
+              </span>
+            </span>
+          </button>
+          {!showMissions && completedMissions.size < missions.length && (
+            <p className="mt-2 text-left text-xs text-muted">
+              Retos de fotos del evento. Toca uno y captura.
+            </p>
+          )}
+          {showMissions && (
+            <ul className="mt-3 border-t border-hairline">
+              {missions.map((m) => {
+                const done = completedMissions.has(m.id);
+                const active = activeMission?.id === m.id;
+                return (
+                  <li key={m.id} className="border-b border-hairline last:border-0">
+                    <button
+                      onClick={() => setActiveMission(active ? null : m)}
+                      className={`flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 py-3 text-left transition-colors ${
+                        active ? "text-accent" : "hover:text-accent"
+                      }`}
+                      aria-pressed={active}
+                    >
+                      <span
+                        className={`text-[15px] leading-snug ${
+                          done && !active ? "text-muted" : ""
+                        }`}
+                      >
+                        {m.title}
+                      </span>
+                      {done ? (
+                        <span
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-accent/60 text-accent"
+                          aria-label="Misión completada"
+                        >
+                          <CheckIcon width={11} height={11} strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <span
+                          aria-hidden
+                          className={`h-5 w-5 shrink-0 rounded-full border ${
+                            active ? "border-accent" : "border-hairline"
+                          }`}
+                        />
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {showMissions && (
+            <p className="mt-3 text-xs leading-relaxed text-muted">
+              Toca una misión y lo próximo que subas cuenta para ella.
+            </p>
+          )}
+        </div>
+      )}
+
       {items.length > 0 && (
         <div className="mt-5 grid grid-cols-3 gap-2">
           {items.map((it) => (
@@ -653,7 +879,7 @@ export default function Uploader({
               disabled={it.status !== "error" && it.status !== "pending"}
               onClick={() =>
                 (it.status === "error" || it.status === "pending") &&
-                runUpload(it.id, it.file, it.name)
+                runUpload(it.id, it.file, it.name, it.missionId)
               }
               className={`relative aspect-square overflow-hidden rounded-md border border-hairline ${
                 it.status === "error" || it.status === "pending"

@@ -18,6 +18,7 @@ export type PendingUpload = {
   isVideo: boolean;
   blob: Blob;
   createdAt: number;
+  missionId?: string | null; // misión activa al capturar (sobrevive a recargas)
 };
 
 function hasIDB(): boolean {
