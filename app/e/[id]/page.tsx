@@ -10,6 +10,7 @@ import EventTabs from "./EventTabs";
 import ClaimOwner from "./ClaimOwner";
 import DangerZone from "./DangerZone";
 import NotifyEmail from "./NotifyEmail";
+import EventSettings from "./EventSettings";
 import { headers } from "next/headers";
 import { baseUrl } from "@/lib/base-url";
 import { ownerCookieName, tokenMatches, sessionOwnsEvent } from "@/lib/owner";
@@ -148,6 +149,7 @@ export default async function EventDashboard({
           {/* Panel de compartir / QR + email de avisos */}
           <div>
             <SharePanel joinUrl={joinUrl} qrDataUrl={qrDataUrl} eventName={event.name} />
+            <EventSettings eventId={event.id} initialType={event.type} />
             <NotifyEmail eventId={event.id} initialEmail={event.ownerEmail ?? ""} />
           </div>
 

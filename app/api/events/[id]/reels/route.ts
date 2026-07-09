@@ -13,9 +13,11 @@ import {
   loadTrackBeats,
   isVibe,
   reelClipBudget,
+  avgBeatsPerClip,
   trackCredit,
   planAudioForDrop,
 } from "@/lib/music";
+import { profileFor } from "@/lib/profiles";
 import { normalizePhoto, enhancedName } from "@/lib/ai/normalize";
 import {
   enhanceVideo,
@@ -40,7 +42,7 @@ const FORMAT_CFG: Record<
   ReelFormat,
   { photoSec: number; videoCapSec: number; maxClips: number }
 > = {
-  reel: { photoSec: 2.4, videoCapSec: 4, maxClips: 20 },
+  reel: { photoSec: 2.4, videoCapSec: 4, maxClips: 32 },
   trailer: { photoSec: 3.0, videoCapSec: 5, maxClips: 40 },
   film: { photoSec: 3.5, videoCapSec: 8, maxClips: 120 },
 };
@@ -95,6 +97,7 @@ export async function POST(
     select: {
       id: true,
       name: true,
+      type: true,
       hostName: true,
       date: true,
       ownerToken: true,
@@ -123,12 +126,16 @@ export async function POST(
     }
   }
 
+  // ── Perfil de edición del TIPO de evento: ritmo, música por defecto,
+  // intensidad de efectos y variante de color. Una boda no se edita como club.
+  const profile = profileFor(event.type);
+
   // ── Música: biblioteca LICENCIADA (nada generado por IA — editamos momentos
   // reales). El organizador puede elegir vibe o pista concreta desde el panel;
-  // sin elección, auto-pick determinista según el formato. Se elige ANTES de
-  // recortar los clips porque el tempo manda sobre cuántos planos caben.
+  // sin elección, el vibe por defecto lo pone el PERFIL del evento. Se elige
+  // ANTES de recortar los clips porque el tempo manda sobre cuántos caben.
   const music = {
-    vibe: isVibe(body?.music?.vibe) ? body.music.vibe : null,
+    vibe: isVibe(body?.music?.vibe) ? body.music.vibe : profile.vibes[format],
     trackId:
       typeof body?.music?.trackId === "string" ? body.music.trackId : null,
   };
@@ -149,8 +156,9 @@ export async function POST(
   // borroso / no duplicado mejor puntuado.
   const cfg = { ...FORMAT_CFG[format] };
   if (format === "reel") {
-    // Con música lenta caben menos planos en los ~30s del spec.
-    cfg.maxClips = reelClipBudget(track.bpm, cfg.maxClips);
+    // Con música lenta (o un perfil que respira) caben menos planos en los
+    // ~30s del spec; un perfil de club necesita casi el doble.
+    cfg.maxClips = reelClipBudget(track.bpm, cfg.maxClips, profile);
   }
   let media = await prisma.mediaItem.findMany({
     where: {
@@ -294,8 +302,10 @@ export async function POST(
   let audioStartSec = 0;
   let dropAtSec: number | null = null;
   if (format === "reel" && tb?.dropSec != null && realBeats.length > 0) {
+    // Duración estimada desde el PERFIL (beats/clip × tempo), no desde los
+    // placeholders: así el objetivo del drop cae dentro del reel real.
     const approxReelSec =
-      clips.reduce((a, c) => a + c.durationInFrames, 0) / FPS;
+      clips.length * avgBeatsPerClip(profile) * (60 / track.bpm);
     const plan = planAudioForDrop(tb.dropSec, approxReelSec);
     audioStartSec = plan.audioStartSec;
     dropAtSec = plan.dropAtSec;
@@ -316,6 +326,7 @@ export async function POST(
     realBeats,
     realDownbeats,
     dropAtSec,
+    profile,
   );
 
   // Héroe al drop: intercambio de contenido entre dos fotos (las duraciones
@@ -337,26 +348,101 @@ export async function POST(
     ) {
       const heroClip = alignedClips[heroIdx];
       const slotClip = alignedClips[slot];
-      // Intercambia identidad visual conservando duración/section del hueco.
+      // Intercambia identidad visual conservando duración/sección del hueco
+      // (el hueco del drop conserva section:"drop" — sus efectos van con él).
       alignedClips[slot] = {
         ...heroClip,
         durationInFrames: slotClip.durationInFrames,
         sectionStart: slotClip.sectionStart,
         label: slotClip.label,
+        section: slotClip.section,
       };
       alignedClips[heroIdx] = {
         ...slotClip,
         durationInFrames: heroClip.durationInFrames,
         sectionStart: heroClip.sectionStart,
         label: heroClip.label,
+        section: heroClip.section,
       };
     }
   }
 
-  // Gradación de color: si hay un LUT 3D activado (GRADE_LUT), renderizamos sin
-  // el look CSS y lo aplica FFmpeg después (más exacto, "de cine"). Si no, el
-  // look cinematográfico CSS de siempre.
-  const lut = resolveLut();
+  // ── Alma sonora: 1–3 momentos de AUDIO REAL de los videos de invitados
+  // respiran por encima de la música (que se agacha con rampas suaves).
+  // Preferencia por sección: vítores en el drop, risas en el build, una voz o
+  // canto en el cierre. Sin videos con momentos utilizables → sólo música.
+  const duckWindows: { fromSec: number; toSec: number }[] = [];
+  {
+    const byId = new Map(media.map((m) => [m.id, m]));
+    let acc = 0;
+    const startsSec = alignedClips.map((c) => {
+      const s = acc;
+      acc += c.durationInFrames / FPS;
+      return s;
+    });
+    const WANT: Record<string, string[]> = {
+      drop: ["cheer", "sing"],
+      party: ["cheer", "laugh"],
+      build: ["laugh", "voice"],
+      intro: ["laugh", "voice"],
+      close: ["voice", "sing", "laugh"],
+      hook: [],
+    };
+    type Cand = {
+      idx: number;
+      moment: { start: number; dur: number; kind: string; score: number };
+      fit: number;
+    };
+    const cands: Cand[] = [];
+    alignedClips.forEach((c, idx) => {
+      if (c.kind !== "video" || idx === 0) return; // el gancho lleva el título
+      const m = byId.get(c.id);
+      if (!m?.audioMoments) return;
+      let moments: Cand["moment"][] = [];
+      try {
+        moments = JSON.parse(m.audioMoments);
+      } catch {
+        return;
+      }
+      const prefs = WANT[c.section] ?? [];
+      for (const mo of moments) {
+        if (mo.score < 0.3) continue;
+        const fitBonus = prefs.includes(mo.kind)
+          ? 0.3 - prefs.indexOf(mo.kind) * 0.1
+          : 0;
+        cands.push({ idx, moment: mo, fit: mo.score + fitBonus });
+      }
+    });
+    cands.sort((a, b) => b.fit - a.fit);
+    const used = new Set<number>();
+    for (const c of cands) {
+      if (duckWindows.length >= 3) break;
+      if (used.has(c.idx)) continue;
+      const from = startsSec[c.idx];
+      const to = from + alignedClips[c.idx].durationInFrames / FPS;
+      // Espaciado: mínimo 4s entre ventanas — que cada momento respire solo.
+      if (duckWindows.some((w) => Math.max(w.fromSec, from) < Math.min(w.toSec, to) + 4))
+        continue;
+      const clip = alignedClips[c.idx];
+      const shownSec = clip.durationInFrames / FPS;
+      const videoDur = byId.get(clip.id)?.durationS ?? shownSec;
+      // El video arranca ~0.3s antes del momento (y sin salirse del archivo).
+      const startFrom = Math.max(
+        0,
+        Math.min(c.moment.start - 0.3, Math.max(0, videoDur - shownSec)),
+      );
+      alignedClips[c.idx] = { ...clip, startFromSec: startFrom, liveAudio: true };
+      duckWindows.push({ fromSec: from + 0.1, toSec: to - 0.1 });
+      used.add(c.idx);
+    }
+  }
+
+  // Gradación de color: variante del PERFIL (boda cálida, club vibrante) salvo
+  // que GRADE_LUT fije un LUT propio; se aplica con FFmpeg tras el render.
+  const envLut = process.env.GRADE_LUT?.trim();
+  const lut = resolveLut(
+    envLut && envLut !== "default" ? undefined : profile.grade,
+  );
 
   // Fecha del evento formateada "DD · MM · YYYY" (o "" si no hay) para el título
   // superpuesto y el outro.
@@ -377,6 +463,8 @@ export async function POST(
     clips: alignedClips,
     audioUrl: `${baseUrl()}${track.file}`,
     audioStartSec,
+    effects: profile.effects,
+    duckWindows,
     bpm: track.bpm,
     beatOffsetSec: track.beatOffsetSec,
     beats: realBeats,

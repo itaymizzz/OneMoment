@@ -6,14 +6,9 @@ import { ArrowRightIcon } from "@/app/components/icons";
 import Reveal from "@/app/components/Reveal";
 import DemoReel from "@/app/components/DemoReel";
 
-const EVENT_TYPES = [
-  { value: "wedding", label: "Boda" },
-  { value: "birthday", label: "Cumpleaños" },
-  { value: "corporate", label: "Corporativo" },
-  { value: "graduation", label: "Graduación" },
-  { value: "party", label: "Fiesta" },
-  { value: "other", label: "Otro" },
-];
+// Tipos de evento desde el config de perfiles de edición: cada tipo trae su
+// ritmo de montaje, música y look propios (lib/editing-profiles.json).
+import { EVENT_TYPES } from "@/lib/profiles";
 
 const FAQ = [
   {
