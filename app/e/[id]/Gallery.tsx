@@ -10,7 +10,7 @@ import {
   TrashIcon,
 } from "@/app/components/icons";
 
-type Override = { pinned?: boolean; hidden?: boolean };
+type Override = { pinned?: boolean; hidden?: boolean; approved?: boolean };
 
 function Thumb({
   m,
@@ -317,6 +317,10 @@ export default function Gallery({
   const unsorted = media.filter((m) => !m.moment && !m.isDuplicate);
   const best = media.filter((m) => m.selected);
 
+  // Moderación del muro: piezas retenidas esperando el visto bueno. Solo
+  // existen si el organizador activó "aprobar antes de mostrar".
+  const unapproved = media.filter((m) => m.approved === false);
+
   return (
     <div className="rounded-md border border-hairline bg-card/50 p-5">
       {active && (
@@ -326,6 +330,66 @@ export default function Gallery({
           onOverride={override}
           onDelete={remove}
         />
+      )}
+      {unapproved.length > 0 && (
+        <div className="mb-6 rounded-md border border-accent/40 bg-accent/5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="eyebrow !text-accent">
+              Moderación · {unapproved.length} esperando
+            </p>
+            <button
+              onClick={() => unapproved.forEach((m) => override(m.id, { approved: true }))}
+              className="cursor-pointer font-mono text-[11px] uppercase tracking-[0.18em] text-accent underline underline-offset-4 hover:text-foreground"
+            >
+              Aprobar todo
+            </button>
+          </div>
+          <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
+            {unapproved.map((m) => (
+              <div
+                key={m.id}
+                className="relative aspect-square overflow-hidden rounded-md border border-hairline"
+              >
+                {m.kind === "video" ? (
+                  <video
+                    src={`/api/media/${m.id}`}
+                    className="h-full w-full object-cover"
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/media/${m.id}`}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
+                )}
+                <div className="absolute inset-x-0 bottom-0 grid grid-cols-2">
+                  <button
+                    onClick={() => override(m.id, { approved: true })}
+                    aria-label="Aprobar para el muro"
+                    className="cursor-pointer bg-accent/90 py-1 font-mono text-[9px] uppercase tracking-widest text-black hover:bg-accent"
+                  >
+                    Aprobar
+                  </button>
+                  <button
+                    onClick={() => remove(m)}
+                    aria-label="Borrar definitivamente"
+                    className="cursor-pointer bg-black/70 py-1 font-mono text-[9px] uppercase tracking-widest text-white hover:bg-red-600"
+                  >
+                    Borrar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Lo retenido no sale en el muro en vivo hasta que lo apruebes. (Sí
+            cuenta para la película: ocúltalo si tampoco la quieres ahí.)
+          </p>
+        </div>
       )}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>

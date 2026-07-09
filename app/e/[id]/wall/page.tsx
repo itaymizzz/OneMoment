@@ -18,7 +18,10 @@ export default async function WallPage({
     include: {
       media: {
         orderBy: { createdAt: "asc" },
-        include: { guest: { select: { name: true } } },
+        include: {
+          guest: { select: { name: true } },
+          mission: { select: { title: true } },
+        },
       },
     },
   });
@@ -38,6 +41,7 @@ export default async function WallPage({
       joinUrl={joinUrl}
       qrDataUrl={qrDataUrl}
       initial={event.media as unknown as Media[]}
+      wallCounter={event.wallCounter}
     />
   );
 }

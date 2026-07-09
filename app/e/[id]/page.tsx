@@ -12,6 +12,7 @@ import DangerZone from "./DangerZone";
 import NotifyEmail from "./NotifyEmail";
 import EventSettings from "./EventSettings";
 import PackagePanel from "./PackagePanel";
+import PartyTools from "./PartyTools";
 import { headers } from "next/headers";
 import { baseUrl } from "@/lib/base-url";
 import { ownerCookieName, tokenMatches, sessionOwnsEvent } from "@/lib/owner";
@@ -37,7 +38,14 @@ export default async function EventDashboard({
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
-      media: { orderBy: { createdAt: "asc" } },
+      media: {
+        orderBy: { createdAt: "asc" },
+        include: { mission: { select: { title: true } } },
+      },
+      missions: {
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: { id: true, title: true, order: true },
+      },
       _count: { select: { media: true, guests: true } },
     },
   });
@@ -150,6 +158,12 @@ export default async function EventDashboard({
           {/* Panel de compartir / QR + email de avisos */}
           <div>
             <SharePanel joinUrl={joinUrl} qrDataUrl={qrDataUrl} eventName={event.name} />
+            <PartyTools
+              eventId={event.id}
+              initialMissions={event.missions}
+              initialModerateWall={event.moderateWall}
+              initialWallCounter={event.wallCounter}
+            />
             <PackagePanel
               eventId={event.id}
               plan={event.plan}

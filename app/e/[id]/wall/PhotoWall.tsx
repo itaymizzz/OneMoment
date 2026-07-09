@@ -6,10 +6,13 @@ import { Media } from "@/lib/types";
 const ADVANCE_MS = 6000; // cuánto dura cada foto en pantalla
 const POLL_MS = 5000; // cada cuánto buscamos fotos nuevas
 
-// Sólo mostramos lo que luce bien en pantalla grande: nada oculto ni borroso.
+// Sólo mostramos lo que luce bien en pantalla grande: nada oculto ni borroso,
+// y con moderación activa, nada sin aprobar (approved === false sólo existe
+// cuando el organizador retiene lo nuevo).
 function displayable(list: Media[]): Media[] {
-  const good = list.filter((m) => !m.hidden && !m.isBlurry);
-  return good.length > 0 ? good : list.filter((m) => !m.hidden);
+  const ok = list.filter((m) => !m.hidden && m.approved !== false);
+  const good = ok.filter((m) => !m.isBlurry);
+  return good.length > 0 ? good : ok;
 }
 
 export default function PhotoWall({
@@ -18,12 +21,14 @@ export default function PhotoWall({
   joinUrl,
   qrDataUrl,
   initial,
+  wallCounter = true,
 }: {
   eventId: string;
   eventName: string;
   joinUrl: string;
   qrDataUrl: string;
   initial: Media[];
+  wallCounter?: boolean;
 }) {
   const [media, setMedia] = useState<Media[]>(initial);
   const [current, setCurrent] = useState<Media | null>(
@@ -54,7 +59,9 @@ export default function PhotoWall({
         for (const m of data.media) {
           if (!seen.current.has(m.id)) {
             seen.current.add(m.id);
-            if (!m.hidden && !m.isBlurry) newQueue.current.push(m);
+            if (!m.hidden && !m.isBlurry && m.approved !== false) {
+              newQueue.current.push(m);
+            }
           }
         }
       } catch {
@@ -65,7 +72,7 @@ export default function PhotoWall({
   }, [eventId]);
 
   // Avanza el slideshow. Si hay fotos nuevas en cola, las muestra primero
-  // (con destello de "nueva"); si no, rota por toda la galería.
+  // (con su entrada especial); si no, rota por toda la galería.
   const advance = useCallback(() => {
     if (newQueue.current.length > 0) {
       const next = newQueue.current.shift()!;
@@ -103,26 +110,31 @@ export default function PhotoWall({
     }
   }
 
-  const count = media.filter((m) => !m.hidden).length;
+  const count = media.filter((m) => !m.hidden && m.approved !== false).length;
 
-  // ── Estado vacío: aún no hay fotos → QR gigante para que empiecen a subir ──
+  // ── Estado vacío: aún no hay fotos → QR protagonista, lenguaje de cartela ──
   if (!current) {
     return (
       <Shell onFullscreen={toggleFullscreen} fullscreen={fullscreen}>
-        <div className="flex h-full flex-col items-center justify-center text-center">
-          <h1 className="font-display text-4xl font-semibold md:text-6xl">
+        <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[#9c948a]">
+            OneMoment presenta
+          </p>
+          <h1 className="font-display mt-5 text-5xl font-light leading-tight text-[#f2ede3] md:text-7xl">
             {eventName}
           </h1>
-          <p className="mt-4 text-lg text-white/70">
+          <p className="mt-6 text-lg text-[#9c948a]">
             Sé el primero: escanea y sube una foto
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={qrDataUrl}
             alt="QR para unirse"
-            className="mt-8 h-56 w-56 rounded-2xl bg-white p-3 md:h-72 md:w-72"
+            className="mt-10 h-56 w-56 bg-white p-3 md:h-72 md:w-72"
           />
-          <p className="mt-4 font-mono text-sm text-white/50">{joinUrl}</p>
+          <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.22em] text-[#9c948a]">
+            {joinUrl.replace(/^https?:\/\//, "")}
+          </p>
         </div>
       </Shell>
     );
@@ -132,8 +144,11 @@ export default function PhotoWall({
 
   return (
     <Shell onFullscreen={toggleFullscreen} fullscreen={fullscreen}>
-      {/* Foto/video a pantalla completa con fundido + Ken Burns */}
-      <div key={current.id} className="wall-slide absolute inset-0">
+      {/* Foto/video a pantalla completa con entrada elegante + Ken Burns */}
+      <div
+        key={current.id}
+        className={`absolute inset-0 ${isNew ? "wall-enter-new" : "wall-slide"}`}
+      >
         {current.kind === "video" ? (
           <video
             src={src}
@@ -148,51 +163,72 @@ export default function PhotoWall({
           <img src={src} alt="" className="wall-media h-full w-full object-cover" />
         )}
         {/* Degradados para que el texto se lea sobre cualquier foto */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/40" />
       </div>
 
-      {/* Nombre del evento */}
+      {/* Cartela del evento */}
       <div className="absolute left-8 top-6 z-10">
-        <p className="font-display text-2xl font-semibold drop-shadow md:text-3xl">
+        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-white/50">
+          OneMoment presenta
+        </p>
+        <p className="font-display mt-1 text-2xl font-light text-[#f2ede3] drop-shadow md:text-3xl">
           {eventName}
         </p>
       </div>
 
-      {/* Destello "nueva foto" (centrado arriba para no chocar con los botones) */}
+      {/* Destello "recién llegada" (centrado arriba, lenguaje de cartela) */}
       {isNew && (
-        <div className="wall-new-badge absolute left-1/2 top-6 z-10 -translate-x-1/2 rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-black shadow-lg">
-          ✨ Nueva foto{current.guest?.name ? ` de ${current.guest.name}` : ""}
+        <div className="wall-new-badge absolute left-1/2 top-6 z-10 -translate-x-1/2 border border-[#c6a15b]/60 bg-[#0b0a08]/80 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#c6a15b] backdrop-blur">
+          Recién llegada
+          {current.guest?.name ? ` · ${current.guest.name}` : ""}
         </div>
       )}
 
-      {/* Autor / caption de la foto actual */}
-      <div className="absolute bottom-6 left-8 z-10 max-w-[60%]">
+      {/* Autor / misión / caption de la foto actual */}
+      <div className="absolute bottom-6 left-8 z-10 max-w-[55%]">
+        {current.mission?.title && (
+          <p className="mb-1.5 inline-block border border-[#c6a15b]/50 bg-[#0b0a08]/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-[#c6a15b] backdrop-blur">
+            Misión · {current.mission.title}
+          </p>
+        )}
         {current.guest?.name && (
-          <p className="text-lg font-medium drop-shadow md:text-xl">
+          <p className="font-display text-xl font-light text-[#f2ede3] drop-shadow md:text-2xl">
             {current.guest.name}
           </p>
         )}
         {current.caption && (
-          <p className="text-sm text-white/70 md:text-base">{current.caption}</p>
+          <p className="mt-0.5 text-sm text-white/60 md:text-base">
+            {current.caption}
+          </p>
         )}
       </div>
 
-      {/* QR permanente en la esquina para que más gente se sume */}
-      <div className="absolute bottom-6 right-8 z-10 flex items-center gap-3 rounded-xl bg-black/45 p-3 backdrop-blur">
+      {/* QR permanente para que más gente se sume, con contador opcional */}
+      <div className="absolute bottom-6 right-8 z-10 flex items-center gap-4 border border-white/15 bg-[#0b0a08]/70 p-3 backdrop-blur">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={qrDataUrl} alt="Escanea para sumar tus fotos" className="h-20 w-20 rounded-md bg-white p-1" />
-        <div className="pr-1 text-sm">
-          <p className="font-semibold">Suma tus fotos</p>
-          <p className="text-white/60">Escanea el código</p>
-          <p className="mt-0.5 text-white/50">{count} recuerdos</p>
+        <img
+          src={qrDataUrl}
+          alt="Escanea para sumar tus fotos"
+          className="h-20 w-20 bg-white p-1"
+        />
+        <div className="pr-1">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c6a15b]">
+            Únete
+          </p>
+          <p className="mt-1 text-sm text-[#f2ede3]">Suma tus fotos</p>
+          {wallCounter && (
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/50">
+              {count} momentos capturados
+            </p>
+          )}
         </div>
       </div>
     </Shell>
   );
 }
 
-// Contenedor a pantalla completa, fondo negro, con botón discreto de fullscreen
-// que se oculta al no mover el ratón.
+// Contenedor a pantalla completa, fondo negro cálido, con botón discreto de
+// fullscreen que se oculta al no mover el ratón.
 function Shell({
   children,
   onFullscreen,
@@ -219,11 +255,11 @@ function Shell({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black text-white">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-[#0b0a08] text-white">
       {children}
       <button
         onClick={onFullscreen}
-        className={`absolute right-8 top-6 z-20 rounded-lg bg-black/50 px-3 py-1.5 text-xs backdrop-blur transition-opacity hover:bg-black/70 ${
+        className={`absolute right-8 top-6 z-20 border border-white/15 bg-[#0b0a08]/60 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-white/80 backdrop-blur transition-opacity hover:text-white ${
           showUi ? "opacity-100" : "opacity-0"
         }`}
       >

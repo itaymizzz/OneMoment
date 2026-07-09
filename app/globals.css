@@ -262,6 +262,18 @@ select option {
   60% { transform: scale(1.02); }
   100% { transform: scale(1); opacity: 1; }
 }
+/* Entrada especial de una foto RECIÉN subida: fundido más lento + leve
+   acercamiento — se siente "presentada", no pegada. */
+@keyframes wallEnterNew {
+  0% { opacity: 0; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.wall-enter-new {
+  animation: wallEnterNew 1.4s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+.wall-enter-new .wall-media {
+  animation: kenburns 8s ease-out both;
+}
 .wall-new-badge {
   animation: wallPop 0.5s ease both;
 }
