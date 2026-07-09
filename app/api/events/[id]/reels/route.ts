@@ -3,6 +3,7 @@ import path from "path";
 import { existsSync } from "fs";
 import { prisma } from "@/lib/db";
 import { requestIsOwner } from "@/lib/owner";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { processEvent } from "@/lib/process";
 import { ensureReelsDir, readMedia, saveBuffer, mediaPath } from "@/lib/storage";
 import { renderReel } from "@/lib/render";
@@ -63,10 +64,14 @@ const FORMAT_CFG: Record<
 const MOMENT_ORDER = new Map(MOMENTS.map((m, i) => [m.key, i]));
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  // El estudio sondea cada ~4s mientras renderiza: 120/min por IP sobra.
+  if (!rateLimit(`reelslist:${clientIp(req)}`, 120, 60 * 1000)) {
+    return NextResponse.json({ error: "Demasiadas peticiones" }, { status: 429 });
+  }
   // Limpia renders colgados: si el contenedor se reinició a mitad (OOM), la
   // fila queda en "rendering" para siempre. Tras 30 min lo damos por fallido
   // (un reel/tráiler tarda minutos; margen de sobra para una película larga).
