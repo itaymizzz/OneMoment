@@ -3,6 +3,7 @@ import { customAlphabet } from "nanoid";
 import { prisma } from "@/lib/db";
 import { saveBuffer, eventDirSize } from "@/lib/storage";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { nextPackageAbove } from "@/lib/pricing";
 
 // Tope de archivos por petición: evita que una sola subida meta miles de
 // archivos y llene el volumen (la app y la base viven en el mismo disco).
@@ -93,7 +94,10 @@ export async function POST(
   if (!rateLimit(`upload-ip:${clientIp(req)}`, 2000, 60 * 60 * 1000)) {
     return NextResponse.json({ error: "Demasiadas subidas. Espera un momento." }, { status: 429 });
   }
-  const event = await prisma.event.findUnique({ where: { id }, select: { id: true } });
+  const event = await prisma.event.findUnique({
+    where: { id },
+    select: { id: true, uploadLimit: true, plan: true },
+  });
   if (!event) {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });
   }
@@ -101,6 +105,31 @@ export async function POST(
   const form = await req.formData().catch(() => null);
   if (!form) {
     return NextResponse.json({ error: "Formato inválido" }, { status: 400 });
+  }
+
+  // ── Límite del PAQUETE (null = evento anterior al sistema: ilimitado) ──
+  // Se aplica en servidor; el cliente recibe un aviso claro con el siguiente
+  // paquete para que el organizador amplíe con un toque.
+  let remainingAllowance = Infinity;
+  if (event.uploadLimit != null) {
+    const current = await prisma.mediaItem.count({ where: { eventId: id } });
+    remainingAllowance = Math.max(0, event.uploadLimit - current);
+    if (current >= event.uploadLimit) {
+      const next = nextPackageAbove(event.uploadLimit);
+      return NextResponse.json(
+        {
+          error:
+            "El evento llegó a su límite de fotos. El organizador puede ampliarlo desde su panel.",
+          code: "upload_limit",
+          limit: event.uploadLimit,
+          plan: event.plan,
+          nextPackage: next
+            ? { id: next.id, uploads: next.uploads, priceUsd: next.priceUsd }
+            : null,
+        },
+        { status: 402 },
+      );
+    }
   }
 
   // Identidad del invitado. Camino preferente: su token secreto (guestToken),
@@ -142,8 +171,11 @@ export async function POST(
   if (allFiles.length === 0) {
     return NextResponse.json({ error: "No se recibieron archivos" }, { status: 400 });
   }
-  // Cap por petición (el cliente sube de a poco de todas formas).
-  const files = allFiles.slice(0, MAX_FILES_PER_REQUEST);
+  // Cap por petición y por la cuota restante del paquete.
+  const files = allFiles.slice(
+    0,
+    Math.min(MAX_FILES_PER_REQUEST, remainingAllowance),
+  );
 
   // Metadatos opcionales que el cliente extrae de los videos (sharp no los lee).
   const num = (k: string) => {

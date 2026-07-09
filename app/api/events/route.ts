@@ -4,9 +4,13 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { makeOwnerToken, ownerCookieName, ownerCookieOptions } from "@/lib/owner";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { PACKAGES } from "@/lib/pricing";
 
 // Slugs cortos y legibles para el link público (sin caracteres ambiguos).
 const makeSlug = customAlphabet("abcdefghjkmnpqrstuvwxyz23456789", 8);
+
+const DEMO_UPLOADS =
+  PACKAGES.find((p) => p.id === "demo")?.uploads ?? 30;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -40,6 +44,10 @@ export async function POST(req: NextRequest) {
       date: body.date ? new Date(body.date) : null,
       ownerEmail: email ?? session?.user.email ?? null,
       userId: session?.user.id ?? null,
+      // Todo evento nace en DEMO (30 subidas, reel con marca, galería 30 días):
+      // el gancho viral para probar antes de la boda. Los paquetes amplían.
+      plan: "demo",
+      uploadLimit: DEMO_UPLOADS,
     },
   });
 

@@ -105,6 +105,24 @@ export function resetPasswordEmail(url: string) {
   };
 }
 
+// Recibo de compra de paquete (o upgrade — se cobra la diferencia).
+export function receiptEmail(
+  eventName: string,
+  uploads: number,
+  chargedCents: number,
+  panelUrl: string,
+) {
+  const amount = (chargedCents / 100).toFixed(2);
+  return {
+    subject: `Recibo — ${uploads} fotos para "${eventName}"`,
+    html: wrap(`
+      <h1 style="font-weight:400;font-size:30px;margin:24px 0 8px">¡Listo! Tu evento creció</h1>
+      <p style="color:#9c948a;font-size:15px;line-height:1.6"><strong>${eventName}</strong> ahora incluye hasta <strong>${uploads.toLocaleString("es")}</strong> fotos y videos — con todo: reel, tráiler y película sin marca, muro en vivo, galería 12 meses y descarga completa.</p>
+      <p style="font-family:'Courier New',monospace;font-size:14px;letter-spacing:1px;color:#f2ede3;margin-top:18px">TOTAL COBRADO&nbsp;&nbsp;US$ ${amount}</p>
+      <a href="${panelUrl}" style="display:inline-block;margin-top:20px;background:#c6a15b;color:#16120a;text-decoration:none;font-weight:600;padding:13px 30px;border-radius:4px">Ir a mi panel</a>`),
+  };
+}
+
 // Aviso amable de fallo, con enlace para reintentar desde el panel.
 export function reelFailedEmail(eventName: string, format: string, panelUrl: string) {
   const f = FORMAT_ES[format] ?? "video";
