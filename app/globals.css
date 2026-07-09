@@ -180,6 +180,10 @@ body.grain:has(.guest-page)::before {
   background: #d4b06e;
   transform: translateY(-1px);
 }
+.btn-primary:active {
+  transform: translateY(0) scale(0.985);
+  transition-duration: 0.1s;
+}
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -312,4 +316,29 @@ select option {
   @page {
     margin: 0;
   }
+}
+
+/* ── Micro-interacciones ─────────────────────────────────────────────────── */
+/* Check de subida completada: pop discreto (una vez, 300ms). */
+@keyframes checkPop {
+  0% { transform: scale(0.4); opacity: 0; }
+  70% { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.check-pop {
+  animation: checkPop 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .check-pop { animation: none; }
+}
+
+/* Cartela de carga global: línea dorada que respira. */
+@keyframes loadingSweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(420%); }
+}
+.loading-bar { background: var(--hairline); }
+.loading-bar-fill { animation: loadingSweep 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar-fill { animation: none; width: 100%; }
 }

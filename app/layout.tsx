@@ -44,6 +44,16 @@ export const metadata: Metadata = {
     "fotos de fiesta QR",
   ],
   applicationName: "OneMoment",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: "/icons/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "OneMoment",
+  },
   openGraph: {
     type: "website",
     locale: "es_ES",
