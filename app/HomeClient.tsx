@@ -73,6 +73,7 @@ export default function HomeClient() {
   const [name, setName] = useState("");
   const [type, setType] = useState("wedding");
   const [hostName, setHostName] = useState("");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,7 +86,7 @@ export default function HomeClient() {
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, type, hostName }),
+        body: JSON.stringify({ name, type, hostName, email }),
       });
       if (!res.ok) throw new Error("No se pudo crear el evento");
       const data = await res.json();
@@ -235,6 +236,25 @@ export default function HomeClient() {
                   onChange={(e) => setHostName(e.target.value)}
                   maxLength={80}
                 />
+              </div>
+
+              <div>
+                <label htmlFor="owner-email" className="eyebrow mb-2.5 block">
+                  Tu email <span className="normal-case">(recomendado)</span>
+                </label>
+                <input
+                  id="owner-email"
+                  type="email"
+                  className="w-full px-3.5 py-3"
+                  placeholder="tu@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  maxLength={200}
+                />
+                <p className="mt-2 text-xs text-muted">
+                  Te enviamos el acceso a tu panel para que nunca lo pierdas —
+                  entras con un clic, sin contraseña.
+                </p>
               </div>
 
               {error && (

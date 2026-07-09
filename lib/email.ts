@@ -60,6 +60,46 @@ export function reelReadyEmail(eventName: string, format: string, panelUrl: stri
   };
 }
 
+// Enlace mágico de acceso. Si viene de crear un evento, hace también de correo
+// de bienvenida (nombre del evento + enlace directo de respaldo al panel).
+export function magicLinkEmail(
+  url: string,
+  eventName: string | null,
+  fallbackUrl: string | null,
+) {
+  return {
+    subject: eventName
+      ? `Tu evento "${eventName}" está listo — entra a tu panel`
+      : "Tu enlace de acceso a OneMoment",
+    html: wrap(`
+      <h1 style="font-weight:300;font-size:28px;margin:24px 0 8px">${
+        eventName ? "Tu evento está creado" : "Entra a OneMoment"
+      }</h1>
+      ${
+        eventName
+          ? `<p style="color:#c9c4b8;font-size:15px;line-height:1.6"><strong>${eventName}</strong> ya tiene su QR y su galería. Entra con un clic — sin contraseña:</p>`
+          : `<p style="color:#c9c4b8;font-size:15px;line-height:1.6">Toca el botón para entrar. El enlace vale 15 minutos y se usa una sola vez.</p>`
+      }
+      <a href="${url}" style="display:inline-block;margin-top:20px;background:#e8b04b;color:#0b0a08;text-decoration:none;font-weight:600;padding:12px 28px;border-radius:8px">Entrar a mi panel</a>
+      ${
+        fallbackUrl
+          ? `<p style="margin-top:28px;font-size:13px;color:#8a8578">¿El enlace caducó? Guarda este acceso directo permanente a tu evento:<br/><a href="${fallbackUrl}" style="color:#e8b04b;word-break:break-all">${fallbackUrl}</a></p>`
+          : ""
+      }`),
+  };
+}
+
+// Restablecer contraseña (para quien eligió el camino clásico).
+export function resetPasswordEmail(url: string) {
+  return {
+    subject: "Restablece tu contraseña de OneMoment",
+    html: wrap(`
+      <h1 style="font-weight:300;font-size:28px;margin:24px 0 8px">¿Nueva contraseña?</h1>
+      <p style="color:#c9c4b8;font-size:15px;line-height:1.6">Toca el botón para elegir una contraseña nueva. Si no lo pediste tú, ignora este correo — tu cuenta sigue segura.</p>
+      <a href="${url}" style="display:inline-block;margin-top:20px;background:#e8b04b;color:#0b0a08;text-decoration:none;font-weight:600;padding:12px 28px;border-radius:8px">Elegir contraseña nueva</a>`),
+  };
+}
+
 // Aviso amable de fallo, con enlace para reintentar desde el panel.
 export function reelFailedEmail(eventName: string, format: string, panelUrl: string) {
   const f = FORMAT_ES[format] ?? "video";

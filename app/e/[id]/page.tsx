@@ -10,8 +10,9 @@ import EventTabs from "./EventTabs";
 import ClaimOwner from "./ClaimOwner";
 import DangerZone from "./DangerZone";
 import NotifyEmail from "./NotifyEmail";
+import { headers } from "next/headers";
 import { baseUrl } from "@/lib/base-url";
-import { ownerCookieName, tokenMatches } from "@/lib/owner";
+import { ownerCookieName, tokenMatches, sessionOwnsEvent } from "@/lib/owner";
 
 export const dynamic = "force-dynamic";
 
@@ -39,24 +40,39 @@ export default async function EventDashboard({
   });
   if (!event) notFound();
 
-  // Acceso de organizador: la cookie httpOnly de este evento, o el enlace
-  // privado ?k=<token>. Sin eso, el panel no se muestra (antes bastaba conocer
-  // el id del evento — que va en la página del invitado — para tener control).
+  // Acceso de organizador, por CUALQUIERA de estas tres credenciales:
+  //   · la cookie httpOnly de este evento (flujo original),
+  //   · el enlace privado ?k=<token> (respaldo permanente),
+  //   · la sesión de cuenta (better-auth) dueña del evento.
   const cookieToken = (await cookies()).get(ownerCookieName(id))?.value;
   const authedByCookie = tokenMatches(cookieToken, event.ownerToken);
   const authedByLink = tokenMatches(k, event.ownerToken);
-  if (!authedByCookie && !authedByLink) {
+  const authedBySession =
+    !authedByCookie && !authedByLink
+      ? await sessionOwnsEvent(await headers(), {
+          id: event.id,
+          userId: event.userId,
+          ownerEmail: event.ownerEmail,
+        })
+      : false;
+  if (!authedByCookie && !authedByLink && !authedBySession) {
     return (
       <main className="flex-1">
         <div className="mx-auto max-w-md px-6 py-24 text-center">
           <h1 className="font-display text-3xl font-semibold">Acceso restringido</h1>
           <p className="mt-3 text-sm text-muted">
-            Este panel es privado del organizador del evento. Ábrelo desde el
-            dispositivo donde lo creaste, o con tu enlace privado de organizador.
+            Este panel es privado del organizador del evento. Entra con tu
+            cuenta, ábrelo desde el dispositivo donde lo creaste, o usa tu
+            enlace privado de organizador.
           </p>
-          <Link href="/" className="btn-primary mt-6 inline-block px-5 py-2.5 text-sm">
-            Volver al inicio
+          <Link href="/login" className="btn-primary mt-6 inline-block px-5 py-2.5 text-sm">
+            Entrar con mi cuenta
           </Link>
+          <p className="mt-4">
+            <Link href="/" className="text-xs text-muted underline underline-offset-2 hover:text-foreground">
+              Volver al inicio
+            </Link>
+          </p>
         </div>
       </main>
     );
@@ -77,9 +93,14 @@ export default async function EventDashboard({
         <ClaimOwner eventId={event.id} token={event.ownerToken as string} />
       ) : null}
       <div className="mx-auto max-w-6xl px-6 py-10">
-        <Link href="/" className="text-sm text-muted hover:text-foreground">
-          ← OneMoment
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/" className="text-sm text-muted hover:text-foreground">
+            ← OneMoment
+          </Link>
+          <Link href="/panel" className="text-sm text-muted hover:text-foreground">
+            Mis eventos
+          </Link>
+        </div>
 
         <header className="mt-4 flex flex-wrap items-end justify-between gap-4">
           <div>
