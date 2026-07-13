@@ -48,6 +48,9 @@ export async function POST(req: NextRequest) {
       // el gancho viral para probar antes de la boda. Los paquetes amplían.
       plan: "demo",
       uploadLimit: DEMO_UPLOADS,
+      // Los eventos nuevos estrenan el contador del muro; los existentes se
+      // quedan como estaban (default false en el schema).
+      wallCounter: true,
     },
   });
 

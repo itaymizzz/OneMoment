@@ -38,8 +38,10 @@ model Event {
   // moderateWall: las subidas NUEVAS esperan aprobación del organizador antes
   // de aparecer en pantalla (eventos formales). wallCounter: contador de
   // "momentos capturados" en la esquina del muro (energía social).
+  // wallCounter default false a nivel DB para que los eventos EXISTENTES no
+  // cambien sin opt-in; los eventos nuevos nacen con true (app/api/events).
   moderateWall Boolean @default(false)
-  wallCounter  Boolean @default(true)
+  wallCounter  Boolean @default(false)
 
   guests   Guest[]
   media    MediaItem[]
