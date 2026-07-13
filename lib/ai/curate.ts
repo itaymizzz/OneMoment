@@ -4,6 +4,8 @@ import {
   DetectFacesCommand,
 } from "@aws-sdk/client-rekognition";
 import { ai } from "./config";
+import { reportAnthropicError, reportRekognitionError } from "../alerts";
+import { recordUsage } from "../usage";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Curación con IA (opcional). Se activa sólo si hay claves.
@@ -40,10 +42,11 @@ export async function scorePhotoClaude(
   jpeg: Buffer,
 ): Promise<AiPhotoScore | null> {
   if (!ai.anthropic) return null;
+  const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
   try {
     const client = new Anthropic({ apiKey: ai.anthropic });
     const msg = await client.messages.create({
-      model: process.env.ANTHROPIC_MODEL || "claude-opus-4-8",
+      model,
       max_tokens: 200,
       messages: [
         {
@@ -61,6 +64,11 @@ export async function scorePhotoClaude(
           ],
         },
       ],
+    });
+    // Gasto medido para el resumen mensual (lib/health.ts).
+    void recordUsage(`anthropic:${model}`, {
+      input: msg.usage.input_tokens,
+      output: msg.usage.output_tokens,
     });
     const text = msg.content
       .map((b) => (b.type === "text" ? b.text : ""))
@@ -84,6 +92,9 @@ export async function scorePhotoClaude(
     };
   } catch (e) {
     console.warn("[ai/curate] Claude falló:", (e as Error).message);
+    // Si es un error de crédito/facturación, Itay se entera por email — esto
+    // es exactamente lo que en julio dejó la IA muerta días sin que se supiera.
+    void reportAnthropicError(e as Error);
     return null;
   }
 }
@@ -107,6 +118,7 @@ export async function analyzeFacesAWS(
     const out = await client.send(
       new DetectFacesCommand({ Image: { Bytes: bytes }, Attributes: ["ALL"] }),
     );
+    void recordUsage("rekognition");
     const faces = out.FaceDetails ?? [];
     if (faces.length === 0)
       return {
@@ -147,6 +159,7 @@ export async function analyzeFacesAWS(
     };
   } catch (e) {
     console.warn("[ai/curate] Rekognition falló:", (e as Error).message);
+    void reportRekognitionError(e as Error);
     return null;
   }
 }

@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { ALERT_EMAIL, getUnnotifiedCriticals } from "@/lib/alerts";
 import SignOutButton from "./SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,14 @@ export default async function PanelPage() {
     include: { _count: { select: { media: true, guests: true } } },
   });
 
+  // Respaldo de alertas: si un incidente CRÍTICO no pudo avisarse por email
+  // (Resend caído), el admin lo ve aquí como banner. Sólo para la cuenta
+  // configurada en ALERT_EMAIL — los organizadores normales no ven nada.
+  const incidents =
+    ALERT_EMAIL && user.email === ALERT_EMAIL
+      ? await getUnnotifiedCriticals()
+      : [];
+
   return (
     <main className="flex-1">
       <div className="mx-auto max-w-4xl px-6 py-10">
@@ -50,6 +59,36 @@ export default async function PanelPage() {
           </Link>
           <SignOutButton email={user.email} />
         </div>
+
+        {incidents.length > 0 && (
+          <div className="mt-6 rounded-md border border-red-500/40 bg-red-500/10 p-4">
+            <p className="font-mono text-xs uppercase tracking-widest text-red-400">
+              🔴 Alertas críticas sin notificar — el email de avisos falló
+            </p>
+            <ul className="mt-2 space-y-1">
+              {incidents.map((i) => (
+                <li key={i.id} className="text-sm">
+                  <span className="text-red-300">{i.title}</span>
+                  <span className="text-muted">
+                    {" "}
+                    · {i.service} ·{" "}
+                    {new Date(i.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC
+                  </span>
+                  {i.link && (
+                    <a
+                      href={i.link}
+                      className="ml-2 text-red-400 underline"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      resolver ↗
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <h1 className="font-display mt-6 text-4xl font-semibold">Mis eventos</h1>
         <p className="mt-1 text-sm text-muted">

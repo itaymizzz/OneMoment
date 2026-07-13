@@ -247,3 +247,35 @@ model Verification {
   @@index([identifier])
   @@map("verification")
 }
+
+// ── Salud del servicio y alertas ──
+// Un incidente = algo que Itay debe saber (cuota agotada, backup fallido,
+// render caído). El email crítico sale al instante; emailedAt null = el email
+// no pudo salir y el banner del panel lo muestra como respaldo.
+model Incident {
+  id         String    @id @default(cuid())
+  service    String // anthropic | rekognition | resend | stripe | disk | backup | render | digest
+  severity   String // critical | warning
+  title      String
+  detail     String
+  link       String? // página de facturación/dashboard del servicio
+  createdAt  DateTime  @default(now())
+  emailedAt  DateTime? // null = email falló o pendiente → banner de respaldo
+  resolvedAt DateTime?
+
+  @@index([service, createdAt])
+  @@index([severity, emailedAt, resolvedAt])
+}
+
+// Contadores mensuales por servicio (para cuota de Resend y el resumen de
+// gastos del día 1). service puede llevar el modelo: "anthropic:claude-haiku-4-5".
+model UsageStat {
+  id          String @id @default(cuid())
+  service     String
+  month       String // "2026-07"
+  count       Int    @default(0)
+  inputUnits  Int    @default(0) // tokens de entrada (anthropic) u otros
+  outputUnits Int    @default(0) // tokens de salida
+
+  @@unique([service, month])
+}

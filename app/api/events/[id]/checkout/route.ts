@@ -8,6 +8,7 @@ import {
   upgradePriceUsd,
 } from "@/lib/pricing";
 import { stripeClient, paymentsMode, unlockPackage } from "@/lib/payments";
+import { reportStripeError } from "@/lib/alerts";
 import { baseUrl } from "@/lib/base-url";
 
 // Compra/upgrade de paquete: crea una sesión de Stripe Checkout (pago único,
@@ -80,7 +81,9 @@ export async function POST(
   }
 
   const stripe = stripeClient()!;
-  const session = await stripe.checkout.sessions.create({
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: [
       {
@@ -102,6 +105,14 @@ export async function POST(
       uploads: String(quote.uploads),
       diffCents: String(dueCents),
     },
-  });
+    });
+  } catch (e) {
+    // Stripe caído o clave inválida = nadie puede comprar. Alerta inmediata.
+    void reportStripeError(`checkout del evento ${id}`, e as Error);
+    return NextResponse.json(
+      { error: "El cobro no está disponible ahora mismo. Inténtalo en unos minutos." },
+      { status: 502 },
+    );
+  }
   return NextResponse.json({ url: session.url, mode: "stripe" });
 }

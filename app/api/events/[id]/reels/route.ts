@@ -28,6 +28,7 @@ import {
 import { resolveLut, applyLut } from "@/lib/ai/grade";
 import { baseUrl } from "@/lib/base-url";
 import { sendEmail, reelReadyEmail, reelFailedEmail } from "@/lib/email";
+import { reportRenderFailure } from "@/lib/alerts";
 import {
   FPS,
   reelFormatSchema,
@@ -534,6 +535,13 @@ export async function POST(
       data: { status: "failed" },
     });
     notify(reelFailedEmail(event.name, format, panelUrl));
+    // Fallo definitivo (ya se agotó el reintento automático): alerta a Itay
+    // con el evento y el error — un cliente se quedó sin su película.
+    void reportRenderFailure(
+      id,
+      event.name,
+      err instanceof Error ? err : new Error(String(err)),
+    );
     return NextResponse.json(
       { error: "Falló el render", detail: err instanceof Error ? err.message : String(err) },
       { status: 500 },

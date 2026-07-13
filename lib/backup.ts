@@ -10,6 +10,7 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { prisma } from "./db";
+import { reportBackupFailure } from "./alerts";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Backup nocturno: snapshot consistente de la base SQLite (VACUUM INTO) + un
@@ -229,7 +230,11 @@ export function scheduleNightlyBackup() {
           `[backup] OK ${r.name} → ${r.target} (${(r.zipBytes / 1024).toFixed(0)} KB, ${r.mediaFiles} medios inventariados, ${r.deletedOld} antiguos borrados)`,
         ),
       )
-      .catch((e) => console.error("[backup] FALLÓ:", (e as Error).message));
+      .catch((e) => {
+        console.error("[backup] FALLÓ:", (e as Error).message);
+        // Un backup que no se completa es CRÍTICO: email inmediato a Itay.
+        void reportBackupFailure(e as Error);
+      });
   const now = new Date();
   const next = new Date(now);
   next.setHours(3, 15, 0, 0);

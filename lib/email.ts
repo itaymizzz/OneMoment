@@ -6,6 +6,8 @@
 // no haya dominio verificado en Resend, el sandbox "onboarding@resend.dev"
 // sólo entrega al propio dueño de la cuenta — suficiente para la beta.
 
+import { recordUsage } from "./usage";
+
 const FROM = process.env.RESEND_FROM || "OneMoment <onboarding@resend.dev>";
 
 export async function sendEmail(opts: {
@@ -28,6 +30,9 @@ export async function sendEmail(opts: {
       console.warn("[email] Resend respondió", res.status, await res.text().catch(() => ""));
       return false;
     }
+    // Cuenta contra la cuota mensual gratuita (3.000/mes) — lib/health.ts
+    // avisa al pasar del 80%.
+    void recordUsage("resend");
     return true;
   } catch (e) {
     console.warn("[email] fallo al enviar:", (e as Error).message);
