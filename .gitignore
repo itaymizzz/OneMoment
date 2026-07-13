@@ -51,3 +51,7 @@ docs/SECURITY_AUDIT.md
 # cookie jars de pruebas locales
 *.txt.cookiejar
 aj.txt
+
+# media real de eventos y videos de referencia (nunca al repo)
+/sample-media
+/reference-videos
