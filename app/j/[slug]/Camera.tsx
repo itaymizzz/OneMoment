@@ -145,8 +145,13 @@ export default function Camera(props: Props) {
       queueMicrotask(() => props.onUnsupported());
       return;
     }
-    void startStream(facing);
-    return () => stopStream();
+    // Diferido un tick: setReady dentro de startStream no debe correr
+    // síncrono dentro del efecto (regla de cascada de renders).
+    const t = setTimeout(() => void startStream(facing), 0);
+    return () => {
+      clearTimeout(t);
+      stopStream();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facing]);
 
