@@ -143,7 +143,7 @@ async function uploadOne(
   fileName: string,
   onProgress: (pct: number) => void,
   missionId?: string | null,
-): Promise<{ ok: boolean; limitReached: boolean }> {
+): Promise<{ ok: boolean; limitReached: boolean; filmFull?: boolean }> {
   const fd = new FormData();
   if (identity.token) fd.append("guestToken", identity.token);
   else fd.append("guestId", identity.guestId);
@@ -156,7 +156,7 @@ async function uploadOne(
     if (m.height) fd.append("height", String(m.height));
   }
 
-  return new Promise<{ ok: boolean; limitReached: boolean }>((resolve) => {
+  return new Promise<{ ok: boolean; limitReached: boolean; filmFull?: boolean }>((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/events/${eventId}/media`);
     xhr.timeout = UPLOAD_TIMEOUT_MS; // no dejamos subidas colgadas para siempre
@@ -169,6 +169,8 @@ async function uploadOne(
         // 402: el evento llegó al límite de su paquete — reintentar no sirve;
         // avisamos con elegancia y el organizador amplía desde su panel.
         limitReached: xhr.status === 402,
+        // 403 film_full: el carrete de ESTE invitado se acabó — tampoco se reintenta.
+        filmFull: xhr.status === 403,
       });
     xhr.onerror = () => resolve({ ok: false, limitReached: false });
     xhr.ontimeout = () => resolve({ ok: false, limitReached: false });
@@ -179,9 +181,14 @@ async function uploadOne(
 export default function Uploader({
   eventId,
   eventName,
+  shotsPerGuest = null,
+  revealAt = null,
 }: {
   eventId: string;
   eventName: string;
+  // Modo carrete (por evento, lo configura el organizador; null = apagado)
+  shotsPerGuest?: number | null;
+  revealAt?: string | null; // ISO; galeria completa bloqueada hasta esta hora
 }) {
   const [phase, setPhase] = useState<Phase>("name");
   const [name, setName] = useState("");
@@ -574,7 +581,7 @@ export default function Uploader({
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       patch(itemId, { status: "uploading", progress: 0 });
-      const { ok, limitReached } = await uploadOne(
+      const { ok, limitReached, filmFull } = await uploadOne(
         eventId,
         who,
         file,
@@ -582,6 +589,13 @@ export default function Uploader({
         (pct) => patch(itemId, { progress: pct }),
         missionId,
       );
+      if (filmFull) {
+        // Carrete completo: el servidor no aceptará más capturas de este
+        // invitado. No se reintenta ni se guarda: se avisa con elegancia.
+        patch(itemId, { status: "error", progress: 0 });
+        await deletePending(itemId);
+        return false;
+      }
       if (limitReached) {
         // Límite del paquete: no es un fallo de red — no reintentamos. El
         // archivo queda guardado en el teléfono (IndexedDB); si el organizador
@@ -689,7 +703,9 @@ export default function Uploader({
           onSaveName={(n) => void saveGuestName(n)}
           missionTitle={activeMission?.title ?? null}
           missionDone={missionJustDone}
-          shotsLeft={null}
+          shotsLeft={
+            shotsPerGuest == null ? null : Math.max(0, shotsPerGuest - mine.length - busy)
+          }
           flashCountdown={flash ? flash.secondsLeft : null}
         />
         {/* input de galería: la subida clásica sigue disponible desde el visor */}
@@ -1136,6 +1152,8 @@ export default function Uploader({
         </div>
       )}
 
+      {revealAt && <RevealGallery eventId={eventId} revealAt={revealAt} />}
+
       <p className="mt-6 text-center text-xs text-muted">
         Sube todo lo que quieras durante el evento. La IA elegirá lo mejor.
       </p>
@@ -1145,6 +1163,91 @@ export default function Uploader({
       >
         ¿No eres {name || "tú"}? Cambiar de invitado
       </button>
+    </div>
+  );
+}
+
+
+// ── Revelado diferido: la galería completa del evento, bloqueada hasta la hora
+// que fijó el organizador. Antes: cuenta regresiva (anticipación, como esperar
+// el revelado del carrete). Después: todos los momentos de todos.
+function RevealGallery({ eventId, revealAt }: { eventId: string; revealAt: string }) {
+  const [media, setMedia] = useState<{ id: string; kind: string; guestName: string | null }[] | null>(null);
+  const revealed = new Date(revealAt).getTime() <= Date.now();
+
+  useEffect(() => {
+    if (!revealed) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/events/${eventId}/gallery`);
+        if (!res.ok) return;
+        const d = (await res.json()) as { media: { id: string; kind: string; guestName: string | null }[] };
+        if (alive) setMedia(d.media);
+      } catch {
+        /* la galería es un regalo, no una dependencia */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, revealed]);
+
+  if (!revealed) {
+    const when = new Date(revealAt);
+    const fmt = when.toLocaleString("es", {
+      weekday: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return (
+      <div className="mt-5 rounded-md border border-hairline bg-card/50 p-5 text-center" data-testid="reveal-tease">
+        <p className="text-2xl" aria-hidden>
+          🎞
+        </p>
+        <p className="eyebrow mt-2">Revelado del carrete</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          La galería completa del evento se revela el {fmt}. Hasta entonces,
+          cada invitado ve sólo sus propias capturas — como esperar las fotos
+          de una cámara desechable.
+        </p>
+      </div>
+    );
+  }
+
+  if (!media || media.length === 0) return null;
+  return (
+    <div className="mt-5 rounded-md border border-hairline bg-card/50 p-5" data-testid="reveal-gallery">
+      <p className="eyebrow">🎞 Galería del evento · revelada</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {media.map((m) => (
+          <div key={m.id} className="relative aspect-square overflow-hidden rounded">
+            {m.kind === "video" ? (
+              <video
+                src={`/api/media/${m.id}`}
+                muted
+                playsInline
+                preload="metadata"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`/api/media/${m.id}`}
+                alt=""
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            )}
+            {m.guestName && m.guestName !== "Invitado" && (
+              <span className="absolute bottom-0 left-0 right-0 truncate bg-black/55 px-1.5 py-0.5 text-[9px] text-white/85">
+                {m.guestName}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

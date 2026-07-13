@@ -34,6 +34,13 @@ model Event {
   coverColor String    @default("#0f0f12")
   createdAt  DateTime  @default(now())
 
+  // ── Modo carrete (cámara desechable) ──
+  // shotsPerGuest: tope de capturas por invitado (null = sin límite, default).
+  // revealAt: hasta esa hora cada invitado ve SÓLO sus fotos; después se
+  // desbloquea la galería completa (null = sin revelado diferido, default).
+  shotsPerGuest Int?
+  revealAt      DateTime?
+
   // ── Muro en vivo ──
   // moderateWall: las subidas NUEVAS esperan aprobación del organizador antes
   // de aparecer en pantalla (eventos formales). wallCounter: contador de

@@ -18,13 +18,17 @@ export async function PATCH(
     type?: string;
     moderateWall?: boolean;
     wallCounter?: boolean;
+    shotsPerGuest?: number | null;
+    revealAt?: string | null;
   } | null;
   if (
     !body ||
     (typeof body.ownerEmail !== "string" &&
       typeof body.type !== "string" &&
       typeof body.moderateWall !== "boolean" &&
-      typeof body.wallCounter !== "boolean")
+      typeof body.wallCounter !== "boolean" &&
+      !("shotsPerGuest" in body) &&
+      !("revealAt" in body))
   ) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
@@ -34,11 +38,36 @@ export async function PATCH(
     type?: string;
     moderateWall?: boolean;
     wallCounter?: boolean;
+    shotsPerGuest?: number | null;
+    revealAt?: Date | null;
   } = {};
 
   // Ajustes del muro en vivo: moderación previa y contador de momentos.
   if (typeof body.moderateWall === "boolean") data.moderateWall = body.moderateWall;
   if (typeof body.wallCounter === "boolean") data.wallCounter = body.wallCounter;
+
+  // Modo carrete: tope de capturas por invitado (null = apagado) y hora del
+  // revelado diferido (null = galeria inmediata, como siempre).
+  if ("shotsPerGuest" in body) {
+    if (body.shotsPerGuest === null) data.shotsPerGuest = null;
+    else {
+      const n = Number(body.shotsPerGuest);
+      if (!Number.isInteger(n) || n < 1 || n > 500) {
+        return NextResponse.json({ error: "shotsPerGuest debe ser 1-500 o null" }, { status: 400 });
+      }
+      data.shotsPerGuest = n;
+    }
+  }
+  if ("revealAt" in body) {
+    if (body.revealAt === null) data.revealAt = null;
+    else {
+      const d = new Date(String(body.revealAt));
+      if (isNaN(d.getTime())) {
+        return NextResponse.json({ error: "revealAt invalida" }, { status: 400 });
+      }
+      data.revealAt = d;
+    }
+  }
 
   if (typeof body.ownerEmail === "string") {
     const email = body.ownerEmail.trim().slice(0, 200);
@@ -64,6 +93,8 @@ export async function PATCH(
       type: ev.type,
       moderateWall: ev.moderateWall,
       wallCounter: ev.wallCounter,
+      shotsPerGuest: ev.shotsPerGuest,
+      revealAt: ev.revealAt,
     });
   } catch {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });

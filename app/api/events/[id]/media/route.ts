@@ -99,7 +99,7 @@ export async function POST(
   }
   const event = await prisma.event.findUnique({
     where: { id },
-    select: { id: true, uploadLimit: true, plan: true, moderateWall: true },
+    select: { id: true, uploadLimit: true, plan: true, moderateWall: true, shotsPerGuest: true },
   });
   if (!event) {
     return NextResponse.json({ error: "Evento no encontrado" }, { status: 404 });
@@ -174,10 +174,28 @@ export async function POST(
   if (allFiles.length === 0) {
     return NextResponse.json({ error: "No se recibieron archivos" }, { status: 400 });
   }
-  // Cap por petición y por la cuota restante del paquete.
+  // ── Modo carrete: tope de capturas POR INVITADO (lo fija el organizador).
+  // Cada disparo "gasta" un cuadro del carrete — como una desechable de verdad.
+  let shotsAllowance = Infinity;
+  if (event.shotsPerGuest != null && guestId) {
+    const spent = await prisma.mediaItem.count({ where: { eventId: id, guestId } });
+    shotsAllowance = Math.max(0, event.shotsPerGuest - spent);
+    if (shotsAllowance === 0) {
+      return NextResponse.json(
+        {
+          error: "film_full",
+          message: "Tu carrete está completo — ¡gracias por capturar el evento!",
+          shotsLeft: 0,
+        },
+        { status: 403 },
+      );
+    }
+  }
+
+  // Cap por petición y por la cuota restante del paquete (y del carrete).
   const files = allFiles.slice(
     0,
-    Math.min(MAX_FILES_PER_REQUEST, remainingAllowance),
+    Math.min(MAX_FILES_PER_REQUEST, remainingAllowance, shotsAllowance),
   );
 
   // Metadatos opcionales que el cliente extrae de los videos (sharp no los lee).

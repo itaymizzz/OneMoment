@@ -163,6 +163,8 @@ export default async function EventDashboard({
               initialMissions={event.missions}
               initialModerateWall={event.moderateWall}
               initialWallCounter={event.wallCounter}
+              initialShotsPerGuest={event.shotsPerGuest}
+              initialRevealAt={event.revealAt?.toISOString() ?? null}
             />
             <PackagePanel
               eventId={event.id}

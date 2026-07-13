@@ -19,7 +19,15 @@ export default async function JoinPage({
   const { slug } = await params;
   const event = await prisma.event.findUnique({
     where: { slug },
-    select: { id: true, name: true, hostName: true, type: true, _count: { select: { media: true } } },
+    select: {
+      id: true,
+      name: true,
+      hostName: true,
+      type: true,
+      shotsPerGuest: true,
+      revealAt: true,
+      _count: { select: { media: true } },
+    },
   });
   if (!event) notFound();
 
@@ -39,7 +47,12 @@ export default async function JoinPage({
           </p>
         </header>
 
-        <Uploader eventId={event.id} eventName={event.name} />
+        <Uploader
+          eventId={event.id}
+          eventName={event.name}
+          shotsPerGuest={event.shotsPerGuest}
+          revealAt={event.revealAt?.toISOString() ?? null}
+        />
 
         <p className="eyebrow mt-10 text-center">
           {event._count.media}{" "}

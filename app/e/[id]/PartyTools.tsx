@@ -14,11 +14,15 @@ export default function PartyTools({
   initialMissions,
   initialModerateWall,
   initialWallCounter,
+  initialShotsPerGuest,
+  initialRevealAt,
 }: {
   eventId: string;
   initialMissions: Mission[];
   initialModerateWall: boolean;
   initialWallCounter: boolean;
+  initialShotsPerGuest: number | null;
+  initialRevealAt: string | null; // ISO
 }) {
   const [missions, setMissions] = useState<Mission[]>(initialMissions);
   const [newTitle, setNewTitle] = useState("");
@@ -33,6 +37,36 @@ export default function PartyTools({
   // ── Ajustes del muro ──
   const [moderateWall, setModerateWall] = useState(initialModerateWall);
   const [wallCounter, setWallCounter] = useState(initialWallCounter);
+
+  // ── Modo carrete (cámara desechable) ──
+  const [shotsEnabled, setShotsEnabled] = useState(initialShotsPerGuest != null);
+  const [shots, setShots] = useState(initialShotsPerGuest ?? 20);
+  const [revealEnabled, setRevealEnabled] = useState(initialRevealAt != null);
+  // datetime-local trabaja en hora local sin zona: convertimos al llegar y al salir.
+  const [revealLocal, setRevealLocal] = useState(() => {
+    if (!initialRevealAt) return "";
+    const d = new Date(initialRevealAt);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
+  const [filmSaved, setFilmSaved] = useState(false);
+
+  async function saveFilmSettings(next: { shotsPerGuest: number | null; revealAt: string | null }) {
+    setError(null);
+    setFilmSaved(false);
+    try {
+      const res = await fetch(`/api/events/${eventId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar el modo carrete");
+      setFilmSaved(true);
+      setTimeout(() => setFilmSaved(false), 2500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    }
+  }
 
   async function fireFlash() {
     if (flashState === "firing") return;
@@ -262,6 +296,100 @@ export default function PartyTools({
             </span>
           </span>
         </label>
+      </div>
+
+      {/* ── Modo carrete: la experiencia de cámara desechable ── */}
+      <div className="mt-5 border-t border-hairline pt-4">
+        <p className="font-medium">Modo carrete 🎞</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          Como una cámara desechable: disparos contados y/o revelado a una hora.
+          Apagado, todo funciona como siempre.
+        </p>
+
+        <label className="mt-3 flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={shotsEnabled}
+            onChange={(e) => {
+              setShotsEnabled(e.target.checked);
+              void saveFilmSettings({
+                shotsPerGuest: e.target.checked ? shots : null,
+                revealAt: revealEnabled && revealLocal ? new Date(revealLocal).toISOString() : null,
+              });
+            }}
+            className="mt-0.5 h-4 w-4 accent-[var(--accent)]"
+          />
+          <span className="flex-1">
+            Disparos limitados por invitado
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+              La escasez hace fotos más pensadas. El visor muestra
+              &laquo;quedan N fotos&raquo;.
+            </span>
+            {shotsEnabled && (
+              <span className="mt-2 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={shots}
+                  onChange={(e) => setShots(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
+                  onBlur={() =>
+                    void saveFilmSettings({
+                      shotsPerGuest: shots,
+                      revealAt: revealEnabled && revealLocal ? new Date(revealLocal).toISOString() : null,
+                    })
+                  }
+                  className="w-20 rounded border border-hairline bg-transparent px-2 py-1 text-sm"
+                />
+                <span className="text-xs text-muted">capturas por invitado</span>
+              </span>
+            )}
+          </span>
+        </label>
+
+        <label className="mt-3 flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={revealEnabled}
+            onChange={(e) => {
+              setRevealEnabled(e.target.checked);
+              void saveFilmSettings({
+                shotsPerGuest: shotsEnabled ? shots : null,
+                revealAt: e.target.checked && revealLocal ? new Date(revealLocal).toISOString() : null,
+              });
+            }}
+            className="mt-0.5 h-4 w-4 accent-[var(--accent)]"
+          />
+          <span className="flex-1">
+            Revelado diferido
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+              Durante el evento cada invitado ve sólo lo suyo; la galería
+              completa se &laquo;revela&raquo; a la hora que elijas.
+            </span>
+            {revealEnabled && (
+              <span className="mt-2 block">
+                <input
+                  type="datetime-local"
+                  value={revealLocal}
+                  onChange={(e) => setRevealLocal(e.target.value)}
+                  onBlur={() => {
+                    if (revealLocal)
+                      void saveFilmSettings({
+                        shotsPerGuest: shotsEnabled ? shots : null,
+                        revealAt: new Date(revealLocal).toISOString(),
+                      });
+                  }}
+                  className="rounded border border-hairline bg-transparent px-2 py-1 text-sm"
+                />
+              </span>
+            )}
+          </span>
+        </label>
+        {filmSaved && (
+          <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-accent">
+            ✓ Guardado
+          </p>
+        )}
       </div>
 
       {error && (
