@@ -71,8 +71,16 @@ export default function SharePanel({
       </p>
 
       <div className="mt-5 flex justify-center rounded-xl bg-white p-3">
+        {/* Tamaño también por CSS (no sólo atributos): el QR jamás puede
+            desbordar su tarjeta, ni con estilos a medio cargar ni con zoom. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={qrDataUrl} alt="QR del evento" width={260} height={260} />
+        <img
+          src={qrDataUrl}
+          alt="QR del evento"
+          width={260}
+          height={260}
+          className="h-auto w-full max-w-[260px]"
+        />
       </div>
 
       <div className="mt-4 break-all rounded-md border border-hairline bg-black/30 px-3 py-2 font-mono text-xs leading-relaxed text-muted">
