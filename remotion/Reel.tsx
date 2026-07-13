@@ -331,7 +331,13 @@ function ClipFrame({
           <Video
             src={clip.url}
             volume={clip.liveAudio ? () => liveVol : 0}
-            trimBefore={Math.round(clip.startFromSec * fps)}
+            trimBefore={
+              // Remotion aborta el render con NaN/Infinity: ante un valor
+              // corrupto se empieza el video desde 0 en vez de perder el reel.
+              Number.isFinite(clip.startFromSec)
+                ? Math.max(0, Math.round(clip.startFromSec * fps))
+                : 0
+            }
             style={{
               width: "100%",
               height: "100%",

@@ -406,6 +406,15 @@ export async function POST(
       } catch {
         return;
       }
+      // Un momento con campos no numéricos (análisis a medias, JSON viejo)
+      // acabaría como trimBefore=NaN y tumbaría el render entero: fuera.
+      if (!Array.isArray(moments)) return;
+      moments = moments.filter(
+        (mo) =>
+          Number.isFinite(mo?.start) &&
+          Number.isFinite(mo?.dur) &&
+          Number.isFinite(mo?.score),
+      );
       const prefs = WANT[c.section] ?? [];
       for (const mo of moments) {
         if (mo.score < 0.3) continue;
