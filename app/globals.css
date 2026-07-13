@@ -369,3 +369,13 @@ select option {
 @media (prefers-reduced-motion: reduce) {
   .polaroid-develop, .camera-flash-border, .mission-check-pop { animation: none; }
 }
+
+/* Tick del contador de carrete: el número "avanza" como un contador mecánico. */
+@keyframes counterTick {
+  0% { transform: translateY(-8px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.counter-tick { animation: counterTick 0.25s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .counter-tick { animation: none; }
+}

@@ -349,7 +349,11 @@ export default function Camera(props: Props) {
       {props.shotsLeft !== null && (
         <div className="absolute right-4 top-1/2 z-30 -translate-y-1/2">
           <div className="rounded-md border border-white/25 bg-black/50 px-2.5 py-2 text-center backdrop-blur">
-            <p className="font-mono text-lg font-bold leading-none text-white" data-testid="shots-left">
+            <p
+              key={props.shotsLeft}
+              className="counter-tick font-mono text-lg font-bold leading-none text-white"
+              data-testid="shots-left"
+            >
               {Math.max(props.shotsLeft, 0)}
             </p>
             <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-white/60">
