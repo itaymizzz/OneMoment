@@ -342,3 +342,30 @@ select option {
 @media (prefers-reduced-motion: reduce) {
   .loading-bar-fill { animation: none; width: 100%; }
 }
+
+/* ── Cámara-first (app/j/[slug]/Camera.tsx) ── */
+/* Revelado polaroid: la captura entra a la miniatura oscura y "se revela". */
+@keyframes polaroidDevelop {
+  0% { filter: brightness(0.15) saturate(0.3) contrast(1.3); transform: scale(1.25); }
+  60% { filter: brightness(0.7) saturate(0.7); }
+  100% { filter: brightness(1) saturate(1); transform: scale(1); }
+}
+.polaroid-develop { animation: polaroidDevelop 0.7s ease-out both; }
+
+/* Borde dorado pulsante del Momento Flash dentro del visor. */
+@keyframes flashBorderPulse {
+  0%, 100% { box-shadow: inset 0 0 0 3px rgba(198, 161, 91, 0.9); }
+  50% { box-shadow: inset 0 0 0 10px rgba(198, 161, 91, 0.35); }
+}
+.camera-flash-border { animation: flashBorderPulse 1s ease-in-out infinite; }
+
+/* Check dorado al completar una misión desde el visor. */
+.mission-check-pop { animation: checkPop 0.45s cubic-bezier(0.25, 0.1, 0.25, 1) both; }
+
+/* El disparador responde al dedo como un botón físico. */
+.shutter-btn { touch-action: none; -webkit-tap-highlight-color: transparent; }
+.shutter-btn:active { transform: scale(0.94); }
+
+@media (prefers-reduced-motion: reduce) {
+  .polaroid-develop, .camera-flash-border, .mission-check-pop { animation: none; }
+}

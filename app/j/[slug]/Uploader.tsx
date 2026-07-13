@@ -14,8 +14,14 @@ import {
   listPending,
   type PendingUpload,
 } from "./upload-queue";
+import Camera from "./Camera";
 
 type Phase = "name" | "claim" | "ready";
+
+// Cámara-first: "probe" mientras detectamos soporte, "on" = visor a pantalla
+// completa (la experiencia estrella), "off" = flujo clásico (fallback y
+// también la vista "mis fotos" a la que se llega desde la miniatura).
+type CameraMode = "probe" | "on" | "off";
 
 // Identidad invisible del invitado en este dispositivo: id + nombre + token
 // secreto. Vive en localStorage y, de respaldo, en una cookie de 90 días —
@@ -204,6 +210,12 @@ export default function Uploader({
   // "Mis fotos": las subidas confirmadas de ESTE invitado, según el servidor.
   const [mine, setMine] = useState<MineItem[]>([]);
   const [showMine, setShowMine] = useState(false);
+  // ── Cámara-first ──
+  const [cameraMode, setCameraMode] = useState<CameraMode>("probe");
+  const cameraSupported = useRef(false);
+  // Check dorado al completar una misión (viaja al chip del visor).
+  const [missionJustDone, setMissionJustDone] = useState(false);
+  const prevCompletedCount = useRef(0);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   // Espejos en ref para que los listeners async (resume, online) vean siempre el
@@ -217,6 +229,35 @@ export default function Uploader({
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+
+  // ¿Hay cámara? El visor es la puerta de entrada; sin getUserMedia (o si el
+  // permiso se niega) el flujo clásico de siempre sigue intacto.
+  useEffect(() => {
+    const ok =
+      typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+    cameraSupported.current = ok;
+    queueMicrotask(() => setCameraMode(ok ? "on" : "off"));
+  }, []);
+
+  // Momento Flash con la cámara cerrada: en vez del overlay clásico, abrimos
+  // el visor directamente (borde dorado + cuenta atrás ya viven ahí).
+  useEffect(() => {
+    if (flash && cameraSupported.current && cameraMode === "off") {
+      setCameraMode("on");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flash?.id]);
+
+  // Una misión recién completada dispara el check dorado en el chip del visor.
+  useEffect(() => {
+    if (completedMissions.size > prevCompletedCount.current) {
+      setMissionJustDone(true);
+      const t = setTimeout(() => setMissionJustDone(false), 2200);
+      prevCompletedCount.current = completedMissions.size;
+      return () => clearTimeout(t);
+    }
+    prevCompletedCount.current = completedMissions.size;
+  }, [completedMissions]);
 
   // Reconocemos al invitado que vuelve: localStorage primero; si el navegador
   // lo limpió pero queda la cookie del token (90 días), rehidratamos del
@@ -435,6 +476,54 @@ export default function Uploader({
     }
   }
 
+  // Identidad perezosa para la cámara-first: el invitado dispara ANTES de dar
+  // su nombre. En la primera captura creamos un invitado anónimo en silencio;
+  // el overlay de nombre llega después, amable y saltable.
+  async function ensureIdentity(): Promise<Identity | null> {
+    if (identityRef.current) return identityRef.current;
+    try {
+      const res = await fetch(`/api/events/${eventId}/guests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Invitado" }),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { guestId: string; name: string; token: string | null };
+      const id: Identity = { guestId: data.guestId, name: data.name, token: data.token ?? null };
+      identityRef.current = id; // visible YA para las subidas en vuelo
+      saveIdentity(eventId, id);
+      setIdentity(id);
+      setName(data.name);
+      setPhase("ready");
+      return id;
+    } catch {
+      return null;
+    }
+  }
+
+  // Ponerle nombre al anónimo (overlay de la cámara). No crea otro invitado:
+  // renombra el suyo, así sus fotos ya subidas siguen siendo suyas.
+  async function saveGuestName(newName: string) {
+    const who = identityRef.current;
+    if (!who?.token) return;
+    try {
+      const res = await fetch(`/api/events/${eventId}/guests`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: who.token, name: newName }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { name: string };
+      const updated: Identity = { ...who, name: data.name };
+      identityRef.current = updated;
+      saveIdentity(eventId, updated);
+      setIdentity(updated);
+      setName(data.name);
+    } catch {
+      /* el nombre es cortesía; las fotos ya están a salvo */
+    }
+  }
+
   // Vuelve a la pantalla de nombre (por si otra persona usa el mismo teléfono).
   function changeName() {
     clearIdentity(eventId);
@@ -523,8 +612,10 @@ export default function Uploader({
   }
 
   async function onFiles(fileList: FileList | null) {
-    const who = identityRef.current;
-    if (!fileList || !who) return;
+    if (!fileList) return;
+    // Cámara-first: puede no haber identidad aún — se crea sola (anónima).
+    const who = identityRef.current ?? (await ensureIdentity());
+    if (!who) return;
     const files = Array.from(fileList);
     // La misión activa al momento de capturar viaja con estas subidas.
     const missionId = activeMissionRef.current?.id ?? null;
@@ -564,6 +655,57 @@ export default function Uploader({
     for (const item of newItems) {
       await runUpload(item.id, item.file, item.name, item.missionId);
     }
+  }
+
+  // Una captura del visor entra a la misma cola resiliente que todo lo demás.
+  async function onCameraCapture(file: File) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    await onFiles(dt.files);
+  }
+
+  // Detectando soporte (primer paint): nada de flashes de UI equivocada.
+  if (cameraMode === "probe") return null;
+
+  // ── CÁMARA-FIRST: QR → visor, sin formularios de por medio ──
+  if (cameraMode === "on") {
+    const busy = items.filter((i) => i.status === "uploading" || i.status === "pending").length;
+    return (
+      <>
+        <Camera
+          onCapture={(f) => void onCameraCapture(f)}
+          onOpenMine={() => {
+            setCameraMode("off");
+            setShowMine(true);
+          }}
+          onOpenLibrary={() => libraryRef.current?.click()}
+          onUnsupported={() => {
+            cameraSupported.current = false;
+            setCameraMode("off");
+          }}
+          queueBusy={busy}
+          lastThumbUrl={items[0]?.url ?? null}
+          guestName={identity && identity.name !== "Invitado" ? identity.name : null}
+          onSaveName={(n) => void saveGuestName(n)}
+          missionTitle={activeMission?.title ?? null}
+          missionDone={missionJustDone}
+          shotsLeft={null}
+          flashCountdown={flash ? flash.secondsLeft : null}
+        />
+        {/* input de galería: la subida clásica sigue disponible desde el visor */}
+        <input
+          ref={libraryRef}
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            void onFiles(e.target.files);
+            e.currentTarget.value = "";
+          }}
+        />
+      </>
+    );
   }
 
   if (phase === "claim") {
@@ -698,6 +840,16 @@ export default function Uploader({
             Ahora no
           </button>
         </div>
+      )}
+
+      {/* Volver al visor: la cámara es la estrella; esto es el backstage */}
+      {cameraSupported.current && (
+        <button
+          onClick={() => setCameraMode("on")}
+          className="btn-primary mb-5 w-full cursor-pointer py-4 text-base"
+        >
+          📷 Volver a la cámara
+        </button>
       )}
 
       <div className="rounded-md border border-hairline bg-card/50 p-5 text-center">

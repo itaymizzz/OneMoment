@@ -34,6 +34,36 @@ export async function GET(
   return NextResponse.json({ guestId: guest.id, name: guest.name });
 }
 
+// Ponerle nombre a un invitado existente (el anónimo de la cámara-first que
+// decide presentarse tras su primera foto). Autenticado por SU token: nadie
+// renombra a otro. No crea invitados nuevos: sus fotos siguen siendo suyas.
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  if (!rateLimit(`guestpatch:${clientIp(req)}`, 60, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "Demasiadas solicitudes." }, { status: 429 });
+  }
+  const body = await req.json().catch(() => null);
+  const token = typeof body?.token === "string" ? body.token : "";
+  const name = typeof body?.name === "string" ? body.name.trim().slice(0, 60) : "";
+  if (!token || !name) {
+    return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
+  }
+  const guest = await prisma.guest.findFirst({
+    where: { token, eventId: id },
+    select: { id: true },
+  });
+  if (!guest) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  const updated = await prisma.guest.update({
+    where: { id: guest.id },
+    data: { name },
+    select: { id: true, name: true },
+  });
+  return NextResponse.json({ guestId: updated.id, name: updated.name });
+}
+
 // Unirse al evento. Tres variantes en el body:
 //   {name}                → si NO hay otro invitado con ese nombre, crea y devuelve
 //                           identidad con token. Si SÍ lo hay, devuelve
